@@ -7,11 +7,36 @@ wait locally for the reduce result.
 """
 import pprint
 import lithops
-from standarized_measurement_functions import sleep_function, prime_function
+import time
 
-# iterdata = [1, 2, 3, 4, 5]
+iterdata = [1, 2, 3, 4, 5]
 
-iterdata = [4]
+def my_map_function(x):
+    print(f"Processing input: {x}")
+    print(f"MAP FUNCITOPM ")
+    time.sleep(x * 2)
+    return x + 7
+
+
+def my_map_function_costly(x):
+    print(f"Processing input: {x}")
+    print(f"MAP FUNCTION ")
+    
+    # CPU-intensive operations to consume energy
+    result = x
+
+    # Calculate prime numbers (very CPU intensive)
+    for i in range(1, 50 ** x): # 500000 ** x --> abortamos mision 5050505050
+        # Check if i is prime using trial division
+        if i > 1:
+            for j in range(2, int(i**0.5) + 1): #optimiza la division --> 1/2 
+                if i % j == 0:
+                    break
+            else:
+                # This is a prime number, do some work with it
+                result = (result + i) % 10000000
+    
+    return result
 
 
 def my_reduce_function(results):
@@ -29,13 +54,13 @@ if __name__ == "__main__":
 
     #  executor distributes the my_map_function across the items in iterdata
     # The my_reduce_function is set to combine the results of the map phase.
-    fexec.map_reduce(sleep_function, iterdata, my_reduce_function)
+    fexec.map_reduce(my_map_function, iterdata, my_reduce_function)
     print(fexec.get_result())
  
 
     print("Async call SLEEP function")
     fexec = lithops.FunctionExecutor()
-    future = fexec.call_async(sleep_function, 3)
+    future = fexec.call_async(my_map_function, 3)
     result = fexec.get_result(fs=[future]) # leng --> return list of parameters 
     # pprint.pprint(future.stats)
 
@@ -48,8 +73,7 @@ if __name__ == "__main__":
 
     print("\nAsync call COSTLY function")
     fexec = lithops.FunctionExecutor()
-    future = fexec.call_async(prime_function, 3)
-    print(f"Prime function result: {future.result()}") #max prime 6249989
+    future = fexec.call_async(my_map_function_costly, 3)
     result = fexec.get_result(fs=[future]) # leng --> return list of parameters 
     # pprint.pprint(future.stats)
     

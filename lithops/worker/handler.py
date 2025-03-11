@@ -220,6 +220,13 @@ def run_task(task):
         call_status.add('worker_func_cpu_usage', cpu_info['usage'])
         call_status.add('worker_func_cpu_system_time', round(cpu_info['system'], 8))
         call_status.add('worker_func_cpu_user_time', round(cpu_info['user'], 8))
+        
+        # this is added to check the energy before the calculation of the TDP
+        # Calculate average CPU usage across all cores --> there are a lot of cores
+        avg_cpu_usage = sum(cpu_info['usage']) / len(cpu_info['usage']) if cpu_info['usage'] else 0
+        call_status.add('worker_func_avg_cpu_usage', avg_cpu_usage)
+        call_status.add('worker_func_energy_consumption', avg_cpu_usage * round(cpu_info['user'], 8))
+
 
         net_io = sys_monitor.get_network_io()
         call_status.add('worker_func_sent_net_io', net_io['sent'])
