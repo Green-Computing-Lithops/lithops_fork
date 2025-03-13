@@ -157,8 +157,23 @@ with open('result_{measurement_id}.pkl', 'wb') as f:
                         if match:
                             # Replace comma with dot for decimal point if needed
                             value_str = match.group(1).replace(',', '.')
-                            energy_data[event_short] = float(value_str)
-                            break
+                            try:
+                                energy_data[event_short] = float(value_str)
+                            except ValueError as ve:
+                                # Handle numbers with multiple dots (e.g. 1.043.75 -> 1043.75)
+                                if value_str.count('.') > 1:
+                                    parts = value_str.split('.')
+                                    cleaned_value = ''.join(parts[:-1]) + '.' + parts[-1]
+                                    try:
+                                        energy_data[event_short] = float(cleaned_value)
+                                        print(f"Converted malformed value {value_str} to {cleaned_value}")
+                                    except ValueError:
+                                        print(f"Warning: Failed to convert {value_str} even after cleaning: {cleaned_value}")
+                                        raise
+                                else:
+                                    print(f"Error converting value {value_str}: {str(ve)}")
+                                    raise
+                            break  # Exit loop after finding matching event
         
         if not energy_data:
             print("No energy measurements found in perf output.")
@@ -291,13 +306,13 @@ def main():
     # Get input values
     sleep_input = 5  # Default value
     prime_input = 4  # Default value
-    
+    user_input = 4
     try:
-        user_input = input("\nEnter a value for the sleep function (default: 5): ").strip()
+        # user_input = input("\nEnter a value for the sleep function (default: 5): ").strip()
         if user_input:
             sleep_input = float(user_input)
         
-        user_input = input("Enter a value for the prime function (default: 4): ").strip()
+        # user_input = input("Enter a value for the prime function (default: 4): ").strip()
         if user_input:
             prime_input = int(user_input)
             

@@ -4,6 +4,15 @@ Simple Lithops example using the map_reduce method.
 In this example the map_reduce() method will launch one
 map function for each entry in 'iterdata', and then it will
 wait locally for the reduce result.
+
+RUN WITH SUDO:
+
+sudo env "PATH=$PATH" /home/bigrobbin/Desktop/TFG/lithops/venv/bin/python3 inigo_test/map_reduce.py
+
+sudo env "PATH=$PATH" /home/bigrobbin/Desktop/TFG/lithops/venv/bin/python3 inigo_test/map_reduce.py
+
+
+
 """
 import pprint
 import lithops
@@ -52,17 +61,24 @@ if __name__ == "__main__":
     print(f"Prime function result: {future.result()}") #max prime 6249989
     result = fexec.get_result(fs=[future]) # leng --> return list of parameters 
     # pprint.pprint(future.stats)
-    
+    # added new 
+    # print(f"Energy Efficiency: {future.stats.get('worker_func_energy_efficiency', 'N/A')}")
+    print(f"Total Energy: {future.stats.get('worker_func_total_energy', 'N/A')}")
+
     # Print only the three specific metrics
     print("COSTLY function metrics:")
     print(f"CPU User Time: {future.stats.get('worker_func_cpu_user_time', 'N/A')}")
     print(f"CPU Usage Average: {future.stats.get('worker_func_avg_cpu_usage', 'N/A')}")
     print(f"Energy Consumption: {future.stats.get('worker_func_energy_consumption', 'N/A')}")
+    
+    # added new 
+    # print(f"Energy Efficiency: {future.stats.get('worker_func_energy_efficiency', 'N/A')}")
+    print(f"Total Energy: {future.stats.get('worker_func_energy_cpu_percent', 'N/A')}")
 
 
 
 """
-
+Basics results :
 initial results: 
 
 SLEEP function metrics:
