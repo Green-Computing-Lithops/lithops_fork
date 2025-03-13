@@ -16,7 +16,7 @@
       "port": 8086,
       "db": "power_consumption",
       "org": "org_test",
-      "token": "<my token>"
+      "token": "Q_XMxbS3IbH7RRKMcNCKgwvYDVQcKQ-AC1oIMVV3oAanKkwtjSvmzHVviUG0DRBz7Os83qhXoqSU8AN6qOE7hA=="
     }
   },
   "cpu-base-freq": 1900,
