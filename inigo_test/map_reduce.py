@@ -18,9 +18,9 @@ import pprint
 import lithops
 from standarized_measurement_functions import sleep_function, prime_function
 
-# iterdata = [1, 2, 3, 4, 5]
+iterdata = [1, 2, 3, 4, 5]
 
-iterdata = [4]
+# iterdata = [4]
 
 
 def my_reduce_function(results):
@@ -90,8 +90,61 @@ Energy Consumption: 29364.764
 
 COSTLY function metrics:
 CPU User Time: 12163.19
-CPU Usage Average: 6.464285714285714
+CPU Usage Average: 6.464285714285714 // suma en vez de caluclo 1600% --> 
 Energy Consumption: 78626.33535714286
+
+-- funciona  calculo base: 
+* lithops vs local --> energia cambia --> 
+
+
+-- perf : 
+storage de los valores --> al finalizar el proceso 
+calculo general 
+
+timeout --> parar el cpu 
+
+
+Average vs suma: calculo 
+- empiezan a coincidir valores perf  --> 
+
+
+/* RAPL low level : german no necesario */
+
+GERMAN: 
+functions --> entornos que se pueda ejecutar perf o no 
+- que detecte directamentes --> si existe directamente 
+- que lo haga lithosp no tu en terminal --> extraer RAPL --> method: TDP / RAPL / PERF
++ agg energia : 
+
+fuentes de datos de tdp maquinas de computacion mas comunes --> 
+uso cpu + maquina EC2 --> funcion --> maquinas de instancias virtuales : 
+
+
+Crear base de datos : Firebase + Scraper + N8N diario --> calculos directas 
+
+guardar la energia:
+
+-- decir en que maquina es mas eficiente ejecutar metabolomica 
+
+
+MAP de lithops --> energia total por todas las funciones 
+ --> una applicacion de lithos 
+
+medir que paralelismo se ejecuta con menos energia 
+--> kpi : optimizacion kpi estimator --> optimizar para energia en local 
+--> Codigo de ejemplo : 
+
+ver que paralelismo da menos consumo energetico 
+* plot graph ( x niveles paralelismo / y energy consumption)
+
+MANRI:
+
+https://github.com/lithops-cloud/applications/blob/master/montecarlo/pi_estimation/pi_estimation.ipynb
+https://github.com/lithops-cloud/applications/blob/master/mandelbrot/example_mandelbrot.ipynb
+
+
+
+
 
 
 """

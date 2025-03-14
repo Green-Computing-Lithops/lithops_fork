@@ -174,3 +174,14 @@ hardcoding --> cambiar por necesario
 
 
 
+
+
+
+# STEPS to follow: 
+1. Obtener la energia
+    - version basica con tdp --> funcionando 
+    - perf: te falta como guardar la informacion 
+    - PowerApi: intentamos hasta las 9 --> sino pedimos ayuda
+    - Ver como funciona Powerapi y ver alternativas
+
+2. Predictor de carga 
