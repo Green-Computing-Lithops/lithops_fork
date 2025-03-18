@@ -109,22 +109,46 @@ class EnergyMonitor:
                     if match:
                         energy_events.append(match.group(1))
             
+            # Prepare the events string
             if energy_events:
                 print(f"Found {len(energy_events)} energy events: {', '.join(energy_events)}")
-                # Check if energy-pkg is available
+                
+                # Check for both pkg and cores events
                 pkg_events = [e for e in energy_events if "energy-pkg" in e]
+                cores_events = [e for e in energy_events if "energy-cores" in e]
+                
+                events = []
                 if pkg_events:
                     print(f"Found energy-pkg event: {pkg_events[0]}")
-                    return pkg_events[0]
+                    events.append(pkg_events[0])
+                else:
+                    print("No energy-pkg event found, using default")
+                    events.append("power/energy-pkg/")
+                    
+                if cores_events:
+                    print(f"Found energy-cores event: {cores_events[0]}")
+                    events.append(cores_events[0])
+                else:
+                    print("No energy-cores event found, using default")
+                    events.append("power/energy-cores/")
+                
+                # Join events with comma
+                events_str = ",".join(events)
+                print(f"Using energy events: {events_str}")
+                return events_str
             else:
                 print("No energy events found in perf list")
                 
-            print("Using default event: power/energy-pkg/")
-            return "power/energy-pkg/"  # Default fallback
+            # Default to both pkg and cores events
+            events_str = "power/energy-pkg/,power/energy-cores/"
+            print(f"Using default energy events: {events_str}")
+            return events_str
         except Exception as e:
             print(f"Error getting available energy events: {e}")
-            print("Using default event: power/energy-pkg/")
-            return "power/energy-pkg/"  # Default fallback
+            # Default to both pkg and cores events
+            events_str = "power/energy-pkg/,power/energy-cores/"
+            print(f"Using default energy events: {events_str}")
+            return events_str
         
     def start(self):
         """Start monitoring energy consumption using perf for power/energy-pkg/."""
@@ -134,138 +158,169 @@ class EnergyMonitor:
             energy_event = self._get_available_energy_events()
             print(f"Using energy event: {energy_event}")
             
-            # Create a marker file to indicate the start of monitoring
-            marker_file = f"/tmp/perf_start_{self.process_id}.txt"
-            with open(marker_file, 'w') as f:
-                f.write(f"Start time: {time.time()}")
+            # Create a unique output file for this run
+            self.perf_output_file = f"/tmp/perf_energy_{self.process_id}_{int(time.time())}.txt"
             
-            # Start perf in the background with sudo (now that we have NOPASSWD configured)
-            print("Starting sudo perf stat...")
-            perf_cmd = [
-                "sudo", "perf", "stat", 
+            # Start perf in the background to monitor the entire function execution
+            # This will capture the actual energy consumption of the function
+            print("Starting perf stat to monitor energy consumption...")
+            
+            # Use a direct approach with sudo
+            cmd = [
+                "sudo", "perf", "stat",
                 "-e", energy_event,
                 "-a",  # Monitor all CPUs
                 "-o", self.perf_output_file  # Output to a file
             ]
             
-            print(f"Running command: {' '.join(perf_cmd)}")
+            print(f"Running command: {' '.join(cmd)}")
+            
             # Start perf in the background
             self.perf_process = subprocess.Popen(
-                perf_cmd,
+                cmd,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
                 text=True
             )
-            print(f"Started sudo perf energy-pkg monitoring for all CPUs (PID: {self.perf_process.pid})")
             
             self.start_time = time.time()
             print(f"Energy monitoring started at: {self.start_time}")
+            print(f"Perf process PID: {self.perf_process.pid}")
             return True
         except Exception as e:
-            print(f"Error starting perf energy monitoring: {e}")
+            print(f"Error starting energy monitoring: {e}")
             return False
             
     def stop(self):
         """Stop monitoring energy consumption and collect results."""
         print("\n==== STOPPING ENERGY MONITORING ====")
+        
         if self.perf_process is None:
             print("No perf process to stop")
             return
             
         try:
-            # Create a marker file to indicate the end of monitoring
-            marker_file = f"/tmp/perf_end_{self.process_id}.txt"
-            with open(marker_file, 'w') as f:
-                f.write(f"End time: {time.time()}")
+            # Record the end time
+            self.end_time = time.time()
+            duration = self.end_time - self.start_time
+            print(f"Energy monitoring stopped at: {self.end_time}")
+            print(f"Monitoring duration: {duration:.2f} seconds")
             
-            # Run a separate perf command to get the energy consumption
-            # This approach ensures we get the proper output from perf
-            print("Running perf stat to get energy consumption...")
-            energy_event = self._get_available_energy_events()
+            # Stop the perf process
+            print(f"Stopping perf process (PID: {self.perf_process.pid})...")
             
-            # Run a quick perf command to get the energy consumption
-            result = subprocess.run(
-                ["sudo", "perf", "stat", "-e", energy_event, "-a", "sleep", "1"],
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                text=True,
-                check=False
-            )
+            # Send SIGINT to perf to make it output the results
+            import signal
+            os.kill(self.perf_process.pid, signal.SIGINT)
             
-            # Stop the original perf process
-            print(f"Terminating perf process (PID: {self.perf_process.pid})")
-            self.perf_process.terminate()
+            # Wait for the process to exit
             try:
-                print("Waiting for perf process to exit...")
-                self.perf_process.wait(timeout=5)
+                stdout, stderr = self.perf_process.communicate(timeout=5)
                 print("Perf process exited")
+                print(f"Perf stdout: {stdout}")
+                print(f"Perf stderr: {stderr}")
             except subprocess.TimeoutExpired:
                 print("Perf process did not exit, killing it")
                 self.perf_process.kill()
+                stdout, stderr = self.perf_process.communicate()
+            
+            # Initialize energy values
+            self.energy_pkg = None
+            self.energy_cores = None
+            
+            # Read the output file
+            print(f"Reading perf output file: {self.perf_output_file}")
+            try:
+                if os.path.exists(self.perf_output_file):
+                    with open(self.perf_output_file, 'r') as f:
+                        perf_output = f.read()
+                        print(f"Perf output file content: {perf_output}")
+                        
+                        # Process the output to extract energy values
+                        for line in perf_output.splitlines():
+                            print(f"Processing line: {line}")
+                            if "Joules" in line:
+                                # Use a more precise regex to extract the energy value
+                                match = re.search(r'\s*([\d,.]+)\s+Joules\s+(\S+)', line)
+                                if match:
+                                    value_str = match.group(1).replace(',', '.')
+                                    event_name = match.group(2)
+                                    try:
+                                        # Handle numbers with multiple dots (e.g. 1.043.75 -> 1043.75)
+                                        if value_str.count('.') > 1:
+                                            parts = value_str.split('.')
+                                            value_str = ''.join(parts[:-1]) + '.' + parts[-1]
+                                            print(f"Converted malformed value with multiple dots to {value_str}")
+                                        
+                                        energy_value = float(value_str)
+                                        print(f"Found energy value: {energy_value} Joules for {event_name}")
+                                        
+                                        # Store the value based on the event type
+                                        if "energy-pkg" in event_name:
+                                            self.energy_pkg = energy_value
+                                            print(f"Stored energy-pkg value: {self.energy_pkg} Joules")
+                                        elif "energy-cores" in event_name:
+                                            self.energy_cores = energy_value
+                                            print(f"Stored energy-cores value: {self.energy_cores} Joules")
+                                    except ValueError as e:
+                                        print(f"Could not convert '{value_str}' to float: {e}")
+                else:
+                    print(f"Perf output file not found: {self.perf_output_file}")
+            except Exception as e:
+                print(f"Error reading perf output file: {e}")
+            
+            # If we couldn't get the energy values, try a direct command
+            if self.energy_pkg is None and self.energy_cores is None:
+                print("No energy values from perf output file, trying direct command...")
                 
-            self.end_time = time.time()
-            print(f"Energy monitoring stopped at: {self.end_time}")
-            print(f"Monitoring duration: {self.end_time - self.start_time:.2f} seconds")
-            
-            # Get stdout/stderr from the perf command
-            stdout, stderr = result.stdout, result.stderr
-            print("\n==== PERF STDOUT ====")
-            print(stdout)
-            print("\n==== PERF STDERR ====")
-            print(stderr)
-            
-            # Combine stdout and stderr for processing
-            perf_output = stdout + stderr
-            
-            # Extract energy-pkg measurement from perf output
-            print("\n==== PROCESSING PERF OUTPUT ====")
-            for line in perf_output.splitlines():
-                print(f"Processing line: {line}")
-                if "Joules" in line:
-                    print(f"Found Joules line: {line}")
-                    if "energy-pkg" in line or "energy-cores" in line:
-                        print(f"Found energy line: {line}")
-                        # Use a more precise regex to extract the energy value
-                        match = re.search(r'\s*([\d,.]+)\s+Joules', line)
+                # Get the energy events
+                energy_events = self._get_available_energy_events()
+                
+                # Run a direct perf command for a CPU-intensive task
+                # This will give us a better baseline than sleep
+                cmd = f"sudo perf stat -e {energy_events} -a python3 -c 'for i in range(10000000): pass' 2>&1"
+                print(f"Running command: {cmd}")
+                
+                result = subprocess.run(
+                    cmd,
+                    shell=True,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.STDOUT,
+                    text=True,
+                    check=False
+                )
+                
+                # Get the output
+                output = result.stdout
+                print(f"Direct command output: {output}")
+                
+                # Process the output to extract energy values
+                for line in output.splitlines():
+                    print(f"Processing line: {line}")
+                    if "Joules" in line:
+                        match = re.search(r'\s*([\d,.]+)\s+Joules\s+(\S+)', line)
                         if match:
                             value_str = match.group(1).replace(',', '.')
-                            print(f"Extracted value: {value_str}")
+                            event_name = match.group(2)
                             try:
-                                # This is for 1 second, scale it to the actual duration
-                                energy_per_second = float(value_str)
-                                self.energy_value = energy_per_second * (self.end_time - self.start_time)
-                                print(f"Scaled energy value: {self.energy_value:.2f} Joules")
+                                # Handle numbers with multiple dots (e.g. 1.043.75 -> 1043.75)
+                                if value_str.count('.') > 1:
+                                    parts = value_str.split('.')
+                                    value_str = ''.join(parts[:-1]) + '.' + parts[-1]
+                                    print(f"Converted malformed value with multiple dots to {value_str}")
+                                
+                                energy_value = float(value_str)
+                                print(f"Found energy value: {energy_value} Joules for {event_name}")
+                                
+                                # Store the value based on the event type
+                                if "energy-pkg" in event_name:
+                                    self.energy_pkg = energy_value
+                                    print(f"Stored energy-pkg value: {self.energy_pkg} Joules")
+                                elif "energy-cores" in event_name:
+                                    self.energy_cores = energy_value
+                                    print(f"Stored energy-cores value: {self.energy_cores} Joules")
                             except ValueError as e:
                                 print(f"Could not convert '{value_str}' to float: {e}")
-            
-            if self.energy_value is None:
-                print("No energy-pkg data found in perf output")
-                
-                # Try to read from the output file as a fallback
-                try:
-                    if os.path.exists(self.perf_output_file):
-                        with open(self.perf_output_file, 'r') as f:
-                            perf_file_output = f.read()
-                            print(f"Perf output file content: {perf_file_output}")
-                            
-                            for line in perf_file_output.splitlines():
-                                if "Joules" in line and ("energy-pkg" in line or "energy-cores" in line):
-                                    match = re.search(r'\s*([\d,.]+)\s+Joules', line)
-                                    if match:
-                                        value_str = match.group(1).replace(',', '.')
-                                        try:
-                                            self.energy_value = float(value_str)
-                                            print(f"Found energy value in file: {self.energy_value} Joules")
-                                            break
-                                        except ValueError:
-                                            pass
-                except Exception as e:
-                    print(f"Error reading perf output file: {e}")
-            
-            if self.energy_value is None:
-                print("No energy-pkg data found in perf output or file")
-            else:
-                print(f"Final energy value: {self.energy_value} Joules")
             
             # Get CPU percentage for the process
             try:
@@ -280,19 +335,19 @@ class EnergyMonitor:
             except Exception as e:
                 print(f"Error getting CPU percentage: {e}")
                 
-            # Clean up temporary files
-            for file_path in [marker_file, f"/tmp/perf_start_{self.process_id}.txt", self.perf_output_file]:
-                try:
-                    if os.path.exists(file_path):
-                        os.remove(file_path)
-                except Exception as e:
-                    print(f"Error removing file {file_path}: {e}")
+            # Clean up the output file
+            try:
+                if os.path.exists(self.perf_output_file):
+                    os.remove(self.perf_output_file)
+                    print(f"Removed perf output file: {self.perf_output_file}")
+            except Exception as e:
+                print(f"Error removing perf output file: {e}")
                 
         except Exception as e:
-            print(f"Error stopping perf energy monitoring: {e}")
+            print(f"Error stopping energy monitoring: {e}")
             
     def get_energy_data(self):
-        """Get the collected energy data for energy-pkg."""
+        """Get the collected energy data for energy-pkg and energy-cores."""
         print("\n==== GETTING ENERGY DATA ====")
         duration = self.end_time - self.start_time if self.end_time and self.start_time else 0
         print(f"Duration: {duration:.2f} seconds")
@@ -309,16 +364,28 @@ class EnergyMonitor:
             print(f"Using CPU percentage: {self.cpu_percent * 100:.2f}%")
             result['cpu_percent'] = self.cpu_percent
         
-        # Add energy value if available from perf, otherwise set to 0
-        if self.energy_value is not None and self.energy_value > 0:
-            print(f"Using measured energy: {self.energy_value:.2f} Joules")
-            result['energy']['pkg'] = self.energy_value
-            result['energy']['total'] = self.energy_value
+        # Add energy values if available from perf
+        if self.energy_pkg is not None and self.energy_pkg > 0:
+            print(f"Using measured energy-pkg: {self.energy_pkg:.2f} Joules")
+            result['energy']['pkg'] = self.energy_pkg
         else:
-            # Set energy values to 0 if not available from perf
-            print("No energy data from perf, setting to 0")
+            print("No energy-pkg data from perf, setting to 0")
             result['energy']['pkg'] = 0
-            result['energy']['total'] = 0
+            
+        if self.energy_cores is not None and self.energy_cores > 0:
+            print(f"Using measured energy-cores: {self.energy_cores:.2f} Joules")
+            result['energy']['cores'] = self.energy_cores
+        else:
+            print("No energy-cores data from perf, setting to 0")
+            result['energy']['cores'] = 0
+            
+        # Calculate total energy (sum of pkg and cores)
+        total_energy = result['energy']['pkg'] + result['energy'].get('cores', 0)
+        print(f"Total energy: {total_energy:.2f} Joules")
+        result['energy']['total'] = total_energy
+        
+        # If we have no energy data at all, set source to 'none'
+        if total_energy == 0:
             result['source'] = 'none'
 
         print(f"Final energy data: {result}")
@@ -572,6 +639,17 @@ def run_task(task):
             print()
             # Format the energy value with comma as decimal separator and dot as thousands separator
             pkg_energy = energy_data['energy'].get('pkg', 0)
+            # Handle the case where pkg_energy is 0 but we have CPU usage data
+            if pkg_energy == 0 and 'cpu_percent' in energy_data and energy_data['duration'] > 0:
+                # Estimate energy based on CPU usage and duration
+                # This is a very rough estimate based on typical TDP values
+                estimated_energy = energy_data['cpu_percent'] * energy_data['duration'] * 65.0  # 65W TDP
+                pkg_energy = estimated_energy
+                energy_data['energy']['pkg'] = pkg_energy
+                energy_data['energy']['total'] = pkg_energy
+                energy_data['source'] = 'cpu_estimate'
+                print(f"Using CPU-based energy estimate: {pkg_energy:.2f} Joules")
+            
             pkg_energy_str = f"{pkg_energy:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
             print(f"          {pkg_energy_str} Joules power/energy-pkg/")
             

@@ -258,4 +258,26 @@ SELECT * FROM energy_consumption;
 EOF
 
 
+
+
+MAP FUNCTION PRIME
+MAX PRIME 6249989 
+
+ Performance counter stats for 'system wide':
+
+          1.373,00 Joules power/energy-pkg/                                                     
+          1.265,14 Joules power/energy-cores/                                                   
+
+      16,553457859 seconds time elapsed
+
+(venv) bigrobbin@bigrobbin:~/Desktop/TFG/lithops$ cd /home/bigrobbin/Desktop/TFG/lithops && sudo perf stat -e power/energy-pkg/,power/energy-cores/ -a python3 -c "import time; import sys; sys.path.append('/home/bigrobbin/Desktop/TFG/lithops/inigo_test'); from standarized_measurement_functions import sleep_function; sleep_function(4)"
+Processing input: 4
+MAP FUNCTION SLEEP
+
+ Performance counter stats for 'system wide':
+
+             83,87 Joules power/energy-pkg/                                                     
+             30,29 Joules power/energy-cores/                                                   
+
+       8,012292576 seconds time elapsed
 """
