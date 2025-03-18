@@ -1,26 +1,14 @@
 import subprocess
 import re
+import os
+import sys
 import time
-import os
-import sys
-import multiprocessing
-import sys
-import os
-
-# Add parent directory (inigo_test/) to sys.path
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
-
-from standarized_measurement_functions import sleep_function, prime_function
-
-# sudo python3 inigo_test/perf/perf_alternative_powerapi.py
-
- 
 
 def get_available_energy_events():
     """Get a list of available energy-related events from perf."""
     try:
         result = subprocess.run(
-            [ "perf", "list"], 
+            ["perf", "list"], 
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             text=True,
@@ -43,94 +31,70 @@ def get_available_energy_events():
         print(f"Error getting available energy events: {e}")
         return []
 
-def measure_function_energy(func, args, energy_events):
+def measure_process_energy(command, energy_events):
     """
-    Measure energy consumption of a function using perf.
-    Waits for the function to complete and returns energy metrics.
+    Measure energy consumption of a process using perf.
     
     Args:
-        func: The function to execute and measure
-        args: Arguments to pass to the function
+        command: The command to execute as a list (e.g., ["python3", "script.py"])
         energy_events: List of energy events to monitor
         
     Returns:
-        Dictionary with energy metrics, execution time, and function result
+        Dictionary with energy metrics and execution time
     """
-    # Create a unique name for this measurement
-    import uuid
-    measurement_id = str(uuid.uuid4())[:8]
+    if not energy_events:
+        print("Warning: No energy events specified.")
+        return {"energy": {}, "execution_time": None}
     
-    # Create a simple wrapper script that will call our function
-    wrapper_script = f"wrapper_{measurement_id}.py"
-    with open(wrapper_script, "w") as f:
-        f.write(f"""
-import sys
-import os
-import pickle
-import time
-import importlib.util
-
-# Load the function from the original module
-spec = importlib.util.spec_from_file_location("module", "{os.path.abspath(__file__)}")
-module = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(module)
-
-# Get the function
-func = getattr(module, "{func.__name__}")
-
-# Record start time
-start_time = time.time()
-
-# Execute the function with arguments
-result = func({args})
-
-# Record end time
-end_time = time.time()
-execution_time = end_time - start_time
-
-# Print completion message
-print(f"Function completed in {{execution_time:.2f}} seconds with result: {{result}}")
-
-# Store result and execution time
-with open('result_{measurement_id}.pkl', 'wb') as f:
-    pickle.dump({{'result': result, 'execution_time': execution_time}}, f)
-""")
+    print(f"Running energy measurement for command: {' '.join(command)}")
     
     # Create a perf command with available energy events
     events_str = ','.join(energy_events)
-    perf_cmd = [
-          "perf", "stat", 
-        "-e", events_str,
-        "-a", "python3", wrapper_script
-    ]
     
-    print(f"Running measurement for {func.__name__} with arguments: {args}")
+    # Create the perf command to monitor the process
+    perf_cmd = [
+        "perf", "stat",
+        "-e", events_str,
+        "-a"  # Monitor all CPUs
+    ] + command
+    
+    # Measure start time
+    start_time = time.time()
     
     # Run the perf command and capture output
     try:
         result = subprocess.run(
-            perf_cmd, 
-            stderr=subprocess.PIPE, 
+            perf_cmd,
+            stderr=subprocess.PIPE,
             stdout=subprocess.PIPE,
             text=True,
             check=False
         )
         
+        # Measure end time
+        end_time = time.time()
+        execution_time = end_time - start_time
+        
+        stdout, stderr = result.stdout, result.stderr
+        
         # Print the raw perf output for debugging
         print("\nRaw perf output:")
-        print(result.stderr)
+        print(stderr)
+        
+        # Store the command output
+        print("\nCommand output:")
+        print(stdout)
         
         # Extract energy measurements from perf output
         energy_data = {}
-        for line in result.stderr.splitlines():
+        for line in stderr.splitlines():
             # Look for energy readings with Joules unit
             if "Joules" in line:
                 # Find which energy event this is
                 for event in energy_events:
                     event_short = event.rstrip('/').split('/')[-1]  # Extract the last part of event name
                     if event_short in line:
-                        # Use a more precise regex to extract the energy value
-                        # The format is typically: "      123.45 Joules power/energy-cores/"
+                        # Extract the energy value
                         match = re.search(r'\s*([\d,.]+)\s+Joules', line)
                         if match:
                             # Replace comma with dot for decimal point if needed
@@ -146,79 +110,68 @@ with open('result_{measurement_id}.pkl', 'wb') as f:
                                         energy_data[event_short] = float(cleaned_value)
                                         print(f"Converted malformed value {value_str} to {cleaned_value}")
                                     except ValueError:
-                                        print(f"Warning: Failed to convert {value_str} even after cleaning: {cleaned_value}")
-                                        raise
+                                        print(f"Warning: Failed to convert {value_str} even after cleaning")
                                 else:
                                     print(f"Error converting value {value_str}: {str(ve)}")
-                                    raise
                             break  # Exit loop after finding matching event
         
         if not energy_data:
             print("No energy measurements found in perf output.")
             
-        # Load the result from the pickle file
-        import pickle
-        result_file = f'result_{measurement_id}.pkl'
-        execution_time = None
-        function_result = None
-        
-        if os.path.exists(result_file):
-            try:
-                with open(result_file, 'rb') as f:
-                    result_data = pickle.load(f)
-                    execution_time = result_data['execution_time']
-                    function_result = result_data['result']
-                    print(f"Function execution details:")
-                    print(f"  Execution time: {execution_time:.2f} seconds")
-                    print(f"  Result: {function_result}")
-            except Exception as e:
-                print(f"Error reading result file: {e}")
-                
-    except subprocess.CalledProcessError as e:
-        print(f"Error running perf: {e}")
-        energy_data = None
-    
-    # Clean up temporary files
-    if os.path.exists(wrapper_script):
-        os.remove(wrapper_script)
-    
-    result_file = f'result_{measurement_id}.pkl'
-    if os.path.exists(result_file):
-        os.remove(result_file)
-        
-    return {
-        "energy": energy_data,
-        "execution_time": execution_time,
-        "result": function_result
-    }
+        return {
+            "energy": energy_data,
+            "execution_time": execution_time,
+            "return_code": result.returncode
+        }
+            
+    except Exception as e:
+        print(f"Error running measurement: {e}")
+        return {"energy": {}, "execution_time": None, "return_code": -1}
 
-def compare_functions(energy_events, sleep_input=5, prime_input=4):
+def compare_functions(energy_events, sleep_seconds=5, prime_n=4):
     """
-    Run both sleep and prime functions once and compare their energy consumption
+    Run both sleep and prime functions and compare their energy consumption
     """
     print("\n=== Running Energy Consumption Comparison Test ===")
     
+    # Prepare commands for each function
+    sleep_cmd = ["python3", "-c", f"from time import sleep; sleep({sleep_seconds})"]
+    prime_cmd = ["python3", "-c", f"""
+def count_primes(n):
+    primes = []
+    for i in range(2, n+1):
+        is_prime = True
+        for j in range(2, int(i**0.5) + 1):
+            if i % j == 0:
+                is_prime = False
+                break
+        if is_prime:
+            primes.append(i)
+    return len(primes)
+    
+result = count_primes(10**{prime_n})
+print(f'Found {{result}} primes')
+"""]
+    
     # Measure sleep function
     print("\n--- Measuring Sleep Function ---")
-    sleep_results = measure_function_energy(sleep_function, sleep_input, energy_events)
+    sleep_results = measure_process_energy(sleep_cmd, energy_events)
     
     # Measure prime function
     print("\n--- Measuring Prime Function ---")
-    prime_results = measure_function_energy(prime_function, prime_input, energy_events)
+    prime_results = measure_process_energy(prime_cmd, energy_events)
     
     # Display results
     print("\n=== Results Comparison ===")
     
     print("\nSleep Function:")
     print(f"  Execution time: {sleep_results['execution_time']:.2f} seconds")
-    print(f"  Result: {sleep_results['result']}")
     print("  Energy consumption:")
     for metric, value in sleep_results['energy'].items():
         print(f"    {metric}: {value:.2f} Joules")
     
     print("\nPrime Function:")
     print(f"  Execution time: {prime_results['execution_time']:.2f} seconds")
-    print(f"  Result: {prime_results['result']}")
     print("  Energy consumption:")
     for metric, value in prime_results['energy'].items():
         print(f"    {metric}: {value:.2f} Joules")
@@ -252,16 +205,32 @@ def compare_functions(energy_events, sleep_input=5, prime_input=4):
         "prime": prime_results
     }
 
+def measure_function_energy(func_module, func_name, args, energy_events):
+    """
+    Measure energy consumption of a specific function using perf.
+    
+    Args:
+        func_module: Module containing the function
+        func_name: Name of the function to execute
+        args: Arguments to pass to the function
+        energy_events: List of energy events to monitor
+        
+    Returns:
+        Dictionary with energy metrics and execution time
+    """
+    # Construct a command that will import and run the function
+    cmd = [
+        "python3", 
+        "-c", 
+        f"import {func_module}; print({func_module}.{func_name}({args}))"
+    ]
+    
+    return measure_process_energy(cmd, energy_events)
+
 def main():
     print("\n")
-    print("Energy Consumption Comparison: Sleep vs Prime Calculation")
-    print("=======================================================")
-    
-    # # Check if running as root (sudo)
-    # if os.geteuid() != 0:
-    #     print("ERROR: This script must be run with sudo to access energy counters.")
-    #     print("Please run again with: sudo python3 perf_alternative_powerapi.py")
-    #     sys.exit(1)
+    print("Energy Consumption Measurement with Perf")
+    print("=======================================")
     
     # Check if perf is available
     try:
@@ -281,25 +250,40 @@ def main():
         print("WARNING: No energy measurement events found.")
         print("The script will continue but may not provide energy measurements.")
     
-    # Get input values
-    sleep_input = 5  # Default value
-    prime_input = 4  # Default value
-    user_input = 4
-    try:
-        # user_input = input("\nEnter a value for the sleep function (default: 5): ").strip()
-        if user_input:
-            sleep_input = float(user_input)
-        
-        # user_input = input("Enter a value for the prime function (default: 4): ").strip()
-        if user_input:
-            prime_input = int(user_input)
-            
-        print(f"Using sleep input: {sleep_input}, prime input: {prime_input}")
-    except ValueError:
-        print(f"Invalid input. Using default values: sleep={sleep_input}, prime={prime_input}")
+    # Specify command to measure or use example comparison
+    choice = input("\nDo you want to: \n1. Measure a specific command\n2. Run the sleep vs prime example\nEnter choice (1/2): ").strip()
     
-    # Run the comparison test
-    compare_functions(energy_events, sleep_input, prime_input)
+    if choice == "1":
+        cmd_str = input("Enter the command to measure (e.g., python3 script.py): ").strip()
+        cmd = cmd_str.split()
+        results = measure_process_energy(cmd, energy_events)
+        
+        print("\n=== Results ===")
+        print(f"Execution time: {results['execution_time']:.2f} seconds")
+        print("Energy consumption:")
+        for metric, value in results['energy'].items():
+            print(f"  {metric}: {value:.2f} Joules")
+    
+    else:  # Default to option 2
+        # Get input values for the example
+        sleep_input = 5  # Default value
+        prime_input = 4  # Default value
+        
+        try:
+            user_input = input("\nEnter seconds for the sleep function (default: 5): ").strip()
+            if user_input:
+                sleep_input = float(user_input)
+            
+            user_input = input("Enter exponent for prime calculation (10^n, default: 4): ").strip()
+            if user_input:
+                prime_input = int(user_input)
+                
+            print(f"Using sleep time: {sleep_input}s, prime calculation: 10^{prime_input}")
+        except ValueError:
+            print(f"Invalid input. Using default values: sleep={sleep_input}s, prime=10^{prime_input}")
+        
+        # Run the comparison test
+        compare_functions(energy_events, sleep_input, prime_input)
 
 if __name__ == "__main__":
     main()

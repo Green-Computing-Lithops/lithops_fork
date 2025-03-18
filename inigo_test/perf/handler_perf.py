@@ -271,10 +271,11 @@ class EnergyMonitor:
             print(f"Using CPU percentage: {self.cpu_percent * 100:.2f}%")
             result['cpu_percent'] = self.cpu_percent
             
+            # no default cases 
             # If no energy value from perf, estimate based on CPU usage
             if self.energy_value is None or self.energy_value == 0:
                 # Typical TDP for a desktop CPU (65W) * CPU usage * duration
-                estimated_energy = 65.0 * self.cpu_percent * duration
+                estimated_energy =  0 # 65.0 * self.cpu_percent * duration
                 self.energy_value = estimated_energy
                 result['source'] = 'cpu_estimate'
                 print(f"Using CPU-based energy estimate: {estimated_energy:.2f} Joules")
@@ -286,7 +287,7 @@ class EnergyMonitor:
             result['energy']['total'] = self.energy_value
         else:
             # Last resort fallback - use a very simple estimate
-            fallback_energy = max(duration * 10.0, 0.1)  # At least 0.1 Joules
+            fallback_energy = 0 # max(duration * 10.0, 0.1)  # At least 0.1 Joules
             result['energy']['pkg'] = fallback_energy
             result['energy']['total'] = fallback_energy
             result['source'] = 'fallback'
@@ -457,6 +458,22 @@ def run_task(task):
         sys_monitor = SystemMonitor(process_id)
         energy_monitor = EnergyMonitor(process_id)
         
+        # Initialize function_name variable
+        function_name = None
+        
+        # Try to read function name from stats file if it already exists
+        if os.path.exists(task.stats_file):
+            logger.info(f"Reading stats file before execution: {task.stats_file}")
+            with open(task.stats_file, 'r') as fid:
+                for line in fid.readlines():
+                    try:
+                        key, value = line.strip().split(" ", 1)
+                        if key == 'function_name':
+                            function_name = value
+                            logger.info(f"Found function name in stats file before execution: {function_name}")
+                    except Exception as e:
+                        logger.error(f"Error processing stats file line before execution: {line} - {e}")
+        
         # Start monitoring
         sys_monitor.start()
         energy_monitor_started = energy_monitor.start()
@@ -544,12 +561,139 @@ def run_task(task):
             print(f"          {cores_energy_str} Joules power/energy-cores/")
             print()
             
-            # Also write to a file in the task directory for persistence
-            energy_file = os.path.join("/home/bigrobbin/Desktop/TFG/lithops/", 'energy_consumption.txt')
-            with open(energy_file, 'w') as f:
-                f.write("Performance counter stats for 'system wide':\n\n")
-                f.write(f"          {pkg_energy_str} Joules power/energy-pkg/\n")
-                f.write(f"          {cores_energy_str} Joules power/energy-cores/\n")
+            # Store energy consumption data in SQLite database
+            import sqlite3
+            
+            db_file = os.path.join("/home/bigrobbin/Desktop/TFG/lithops/", 'energy_consumption.db')
+            timestamp = time.time()
+            
+            try:
+                conn = sqlite3.connect(db_file)
+                cursor = conn.cursor()
+                
+                # Create energy consumption table
+                create_energy_table = '''
+                CREATE TABLE IF NOT EXISTS energy_consumption (
+                    job_key TEXT,
+                    call_id TEXT,
+                    timestamp REAL,
+                    energy_pkg REAL,
+                    energy_cores REAL,
+                    duration REAL,
+                    source TEXT,
+                    function_name TEXT,
+                    PRIMARY KEY (job_key, call_id)
+                )
+                '''
+                cursor.execute(create_energy_table)
+                
+                # Create CPU usage table to store per-CPU data
+                create_cpu_table = '''
+                CREATE TABLE IF NOT EXISTS cpu_usage (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    job_key TEXT,
+                    call_id TEXT,
+                    cpu_id INTEGER,
+                    cpu_percent REAL,
+                    timestamp REAL,
+                    FOREIGN KEY (job_key, call_id) REFERENCES energy_consumption(job_key, call_id)
+                )
+                '''
+                cursor.execute(create_cpu_table)
+                
+                # Create CPU times table
+                create_cpu_times_table = '''
+                CREATE TABLE IF NOT EXISTS cpu_times (
+                    job_key TEXT,
+                    call_id TEXT,
+                    system_time REAL,
+                    user_time REAL,
+                    timestamp REAL,
+                    PRIMARY KEY (job_key, call_id),
+                    FOREIGN KEY (job_key, call_id) REFERENCES energy_consumption(job_key, call_id)
+                )
+                '''
+                cursor.execute(create_cpu_times_table)
+                
+                # Insert energy consumption data
+                cursor.execute('''
+                    INSERT OR REPLACE INTO energy_consumption 
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                ''', (
+                    task.job_key,
+                    task.call_id,
+                    timestamp,
+                    pkg_energy,
+                    cores_energy,
+                    energy_data['duration'],
+                    energy_data.get('source', 'unknown'),
+                    function_name  # Use the function name from stats file
+                ))
+                
+                # Insert CPU usage data for each CPU core
+                for cpu_id, cpu_percent in enumerate(cpu_info['usage']):
+                    cursor.execute('''
+                        INSERT INTO cpu_usage (job_key, call_id, cpu_id, cpu_percent, timestamp)
+                        VALUES (?, ?, ?, ?, ?)
+                    ''', (
+                        task.job_key,
+                        task.call_id,
+                        cpu_id,
+                        cpu_percent,
+                        timestamp
+                    ))
+                
+                # Insert CPU times data
+                cursor.execute('''
+                    INSERT OR REPLACE INTO cpu_times
+                    VALUES (?, ?, ?, ?, ?)
+                ''', (
+                    task.job_key,
+                    task.call_id,
+                    cpu_info['system'],
+                    cpu_info['user'],
+                    timestamp
+                ))
+                
+                # Also store the formatted output for reference
+                create_formatted_table = '''
+                CREATE TABLE IF NOT EXISTS formatted_output (
+                    job_key TEXT,
+                    call_id TEXT,
+                    timestamp REAL,
+                    output TEXT,
+                    PRIMARY KEY (job_key, call_id)
+                )
+                '''
+                cursor.execute(create_formatted_table)
+                
+                formatted_output = "Performance counter stats for 'system wide':\n\n"
+                formatted_output += f"          {pkg_energy_str} Joules power/energy-pkg/\n"
+                formatted_output += f"          {cores_energy_str} Joules power/energy-cores/\n"
+                
+                cursor.execute('''
+                    INSERT OR REPLACE INTO formatted_output
+                    VALUES (?, ?, ?, ?)
+                ''', (
+                    task.job_key,
+                    task.call_id,
+                    timestamp,
+                    formatted_output
+                ))
+                
+                conn.commit()
+                conn.close()
+                
+                logger.info(f"Energy data stored in SQLite database: {db_file}")
+            except Exception as e:
+                logger.error(f"Error writing energy data to SQLite database: {e}")
+                # Fallback to file-based storage if database fails
+                energy_file = os.path.join("/home/bigrobbin/Desktop/TFG/lithops/", f'energy_consumption_{task.job_key}_{task.call_id}.txt')
+                with open(energy_file, 'w') as f:
+                    f.write("Performance counter stats for 'system wide':\n\n")
+                    f.write(f"          {pkg_energy_str} Joules power/energy-pkg/\n")
+                    f.write(f"          {cores_energy_str} Joules power/energy-cores/\n")
+                logger.info(f"Energy data stored in fallback file: {energy_file}")
 
         if jrp.is_alive():
             # If process is still alive after jr.join(job_max_runtime), kill it
@@ -571,16 +715,47 @@ def run_task(task):
             msg = 'Function exceeded maximum memory and was killed'
             raise MemoryError('HANDLER', msg)
 
+        # Get function name from stats file if available
+        function_name_updated = False
         if os.path.exists(task.stats_file):
+            logger.info(f"Reading stats file after execution: {task.stats_file}")
             with open(task.stats_file, 'r') as fid:
                 for line in fid.readlines():
-                    key, value = line.strip().split(" ", 1)
                     try:
-                        call_status.add(key, float(value))
-                    except Exception:
-                        call_status.add(key, value)
-                    if key in ['exception', 'exc_pickle_fail']:
-                        call_status.add(key, eval(value))
+                        key, value = line.strip().split(" ", 1)
+                        if key == 'function_name':
+                            function_name = value
+                            function_name_updated = True
+                            logger.info(f"Found function name in stats file after execution: {function_name}")
+                            
+                            # Update the function name in the SQLite database
+                            try:
+                                import sqlite3
+                                db_file = os.path.join("/home/bigrobbin/Desktop/TFG/lithops/", 'energy_consumption.db')
+                                conn = sqlite3.connect(db_file)
+                                cursor = conn.cursor()
+                                cursor.execute('''
+                                    UPDATE energy_consumption 
+                                    SET function_name = ?
+                                    WHERE job_key = ? AND call_id = ?
+                                ''', (function_name, task.job_key, task.call_id))
+                                conn.commit()
+                                conn.close()
+                                logger.info(f"Updated function name in SQLite database: {function_name}")
+                            except Exception as e:
+                                logger.error(f"Error updating function name in SQLite database: {e}")
+                        
+                        try:
+                            call_status.add(key, float(value))
+                        except Exception:
+                            call_status.add(key, value)
+                        if key in ['exception', 'exc_pickle_fail']:
+                            call_status.add(key, eval(value))
+                    except Exception as e:
+                        logger.error(f"Error processing stats file line after execution: {line} - {e}")
+            
+            if not function_name_updated:
+                logger.warning("Function name not found in stats file after execution")
 
     except KeyboardInterrupt:
         job_interruped = True

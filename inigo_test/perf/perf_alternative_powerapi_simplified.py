@@ -4,8 +4,9 @@ import time
 import os
 import sys
 import multiprocessing
-import sys
-import os
+import pickle
+import tempfile
+import uuid
 
 # Add parent directory (inigo_test/) to sys.path
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
@@ -14,13 +15,11 @@ from standarized_measurement_functions import sleep_function, prime_function
 
 # sudo python3 inigo_test/perf/perf_alternative_powerapi.py
 
- 
-
 def get_available_energy_events():
     """Get a list of available energy-related events from perf."""
     try:
         result = subprocess.run(
-            [ "perf", "list"], 
+            ["perf", "list"], 
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             text=True,
@@ -46,7 +45,7 @@ def get_available_energy_events():
 def measure_function_energy(func, args, energy_events):
     """
     Measure energy consumption of a function using perf.
-    Waits for the function to complete and returns energy metrics.
+    Uses a direct approach without a wrapper script.
     
     Args:
         func: The function to execute and measure
@@ -57,32 +56,36 @@ def measure_function_energy(func, args, energy_events):
         Dictionary with energy metrics, execution time, and function result
     """
     # Create a unique name for this measurement
-    import uuid
     measurement_id = str(uuid.uuid4())[:8]
     
-    # Create a simple wrapper script that will call our function
-    wrapper_script = f"wrapper_{measurement_id}.py"
-    with open(wrapper_script, "w") as f:
-        f.write(f"""
-import sys
-import os
+    # Create a temporary file to store results
+    result_file = f'result_{measurement_id}.pkl'
+    
+    print(f"Running measurement for {func.__name__} with arguments: {args}")
+    
+    # Create a perf command with available energy events
+    events_str = ','.join(energy_events)
+    
+    # Create a Python command that will execute our function and save results
+    python_cmd = [
+        "python3", "-c",
+        f"""
 import pickle
 import time
-import importlib.util
+import sys
+import os
 
-# Load the function from the original module
-spec = importlib.util.spec_from_file_location("module", "{os.path.abspath(__file__)}")
-module = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(module)
+# Add parent directory to sys.path
+sys.path.append(os.path.abspath(os.path.join('{os.path.dirname(os.path.abspath(__file__))}', '..')))
 
-# Get the function
-func = getattr(module, "{func.__name__}")
+# Import the function
+from standarized_measurement_functions import {func.__name__}
 
 # Record start time
 start_time = time.time()
 
-# Execute the function with arguments
-result = func({args})
+# Execute the function
+result = {func.__name__}({args})
 
 # Record end time
 end_time = time.time()
@@ -92,37 +95,37 @@ execution_time = end_time - start_time
 print(f"Function completed in {{execution_time:.2f}} seconds with result: {{result}}")
 
 # Store result and execution time
-with open('result_{measurement_id}.pkl', 'wb') as f:
+with open('{os.path.abspath(result_file)}', 'wb') as f:
     pickle.dump({{'result': result, 'execution_time': execution_time}}, f)
-""")
-    
-    # Create a perf command with available energy events
-    events_str = ','.join(energy_events)
-    perf_cmd = [
-          "perf", "stat", 
-        "-e", events_str,
-        "-a", "python3", wrapper_script
+"""
     ]
     
-    print(f"Running measurement for {func.__name__} with arguments: {args}")
+    # Create the perf command to monitor the Python process
+    perf_cmd = [
+        "perf", "stat",
+        "-e", events_str,
+        "-a"  # Monitor all CPUs
+    ] + python_cmd
     
     # Run the perf command and capture output
     try:
         result = subprocess.run(
-            perf_cmd, 
-            stderr=subprocess.PIPE, 
+            perf_cmd,
+            stderr=subprocess.PIPE,
             stdout=subprocess.PIPE,
             text=True,
             check=False
         )
         
+        stdout, stderr = result.stdout, result.stderr
+        
         # Print the raw perf output for debugging
         print("\nRaw perf output:")
-        print(result.stderr)
+        print(stderr)
         
         # Extract energy measurements from perf output
         energy_data = {}
-        for line in result.stderr.splitlines():
+        for line in stderr.splitlines():
             # Look for energy readings with Joules unit
             if "Joules" in line:
                 # Find which energy event this is
@@ -157,8 +160,6 @@ with open('result_{measurement_id}.pkl', 'wb') as f:
             print("No energy measurements found in perf output.")
             
         # Load the result from the pickle file
-        import pickle
-        result_file = f'result_{measurement_id}.pkl'
         execution_time = None
         function_result = None
         
@@ -174,15 +175,13 @@ with open('result_{measurement_id}.pkl', 'wb') as f:
             except Exception as e:
                 print(f"Error reading result file: {e}")
                 
-    except subprocess.CalledProcessError as e:
-        print(f"Error running perf: {e}")
-        energy_data = None
+    except Exception as e:
+        print(f"Error running measurement: {e}")
+        energy_data = {}
+        execution_time = None
+        function_result = None
     
     # Clean up temporary files
-    if os.path.exists(wrapper_script):
-        os.remove(wrapper_script)
-    
-    result_file = f'result_{measurement_id}.pkl'
     if os.path.exists(result_file):
         os.remove(result_file)
         

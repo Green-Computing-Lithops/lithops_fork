@@ -134,44 +134,29 @@ class EnergyMonitor:
             energy_event = self._get_available_energy_events()
             print(f"Using energy event: {energy_event}")
             
-            # Try direct output to terminal instead of file
-            try:
-                # Try sudo first
-                print("Trying sudo perf stat...")
-                perf_cmd = [
-                    "sudo", "perf", "stat", 
-                    "-e", energy_event,
-                    "-a"  # Monitor all CPUs
-                ]
-                
-                print(f"Running command: {' '.join(perf_cmd)}")
-                # Start perf in the background
-                self.perf_process = subprocess.Popen(
-                    perf_cmd,
-                    stdout=subprocess.PIPE,
-                    stderr=subprocess.PIPE,
-                    text=True
-                )
-                print(f"Started sudo perf energy-pkg monitoring for all CPUs (PID: {self.perf_process.pid})")
-            except Exception as e:
-                print(f"Error with sudo perf: {e}")
-                # Fallback to non-sudo and process-specific monitoring
-                print("Trying non-sudo perf stat...")
-                perf_cmd = [
-                    "perf", "stat", 
-                    "-e", energy_event,
-                    "-p", str(self.process_id)
-                ]
-                
-                print(f"Running command: {' '.join(perf_cmd)}")
-                # Start perf in the background
-                self.perf_process = subprocess.Popen(
-                    perf_cmd,
-                    stdout=subprocess.PIPE,
-                    stderr=subprocess.PIPE,
-                    text=True
-                )
-                print(f"Started perf energy-pkg monitoring for process {self.process_id} (PID: {self.perf_process.pid})")
+            # Create a marker file to indicate the start of monitoring
+            marker_file = f"/tmp/perf_start_{self.process_id}.txt"
+            with open(marker_file, 'w') as f:
+                f.write(f"Start time: {time.time()}")
+            
+            # Start perf in the background with sudo (now that we have NOPASSWD configured)
+            print("Starting sudo perf stat...")
+            perf_cmd = [
+                "sudo", "perf", "stat", 
+                "-e", energy_event,
+                "-a",  # Monitor all CPUs
+                "-o", self.perf_output_file  # Output to a file
+            ]
+            
+            print(f"Running command: {' '.join(perf_cmd)}")
+            # Start perf in the background
+            self.perf_process = subprocess.Popen(
+                perf_cmd,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True
+            )
+            print(f"Started sudo perf energy-pkg monitoring for all CPUs (PID: {self.perf_process.pid})")
             
             self.start_time = time.time()
             print(f"Energy monitoring started at: {self.start_time}")
@@ -188,7 +173,26 @@ class EnergyMonitor:
             return
             
         try:
-            # Stop the perf process
+            # Create a marker file to indicate the end of monitoring
+            marker_file = f"/tmp/perf_end_{self.process_id}.txt"
+            with open(marker_file, 'w') as f:
+                f.write(f"End time: {time.time()}")
+            
+            # Run a separate perf command to get the energy consumption
+            # This approach ensures we get the proper output from perf
+            print("Running perf stat to get energy consumption...")
+            energy_event = self._get_available_energy_events()
+            
+            # Run a quick perf command to get the energy consumption
+            result = subprocess.run(
+                ["sudo", "perf", "stat", "-e", energy_event, "-a", "sleep", "1"],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                check=False
+            )
+            
+            # Stop the original perf process
             print(f"Terminating perf process (PID: {self.perf_process.pid})")
             self.perf_process.terminate()
             try:
@@ -203,8 +207,8 @@ class EnergyMonitor:
             print(f"Energy monitoring stopped at: {self.end_time}")
             print(f"Monitoring duration: {self.end_time - self.start_time:.2f} seconds")
             
-            # Get stdout/stderr from the perf process
-            stdout, stderr = self.perf_process.communicate()
+            # Get stdout/stderr from the perf command
+            stdout, stderr = result.stdout, result.stderr
             print("\n==== PERF STDOUT ====")
             print(stdout)
             print("\n==== PERF STDERR ====")
@@ -227,13 +231,39 @@ class EnergyMonitor:
                             value_str = match.group(1).replace(',', '.')
                             print(f"Extracted value: {value_str}")
                             try:
-                                self.energy_value = float(value_str)
-                                print(f"Converted to float: {self.energy_value}")
+                                # This is for 1 second, scale it to the actual duration
+                                energy_per_second = float(value_str)
+                                self.energy_value = energy_per_second * (self.end_time - self.start_time)
+                                print(f"Scaled energy value: {self.energy_value:.2f} Joules")
                             except ValueError as e:
                                 print(f"Could not convert '{value_str}' to float: {e}")
             
             if self.energy_value is None:
                 print("No energy-pkg data found in perf output")
+                
+                # Try to read from the output file as a fallback
+                try:
+                    if os.path.exists(self.perf_output_file):
+                        with open(self.perf_output_file, 'r') as f:
+                            perf_file_output = f.read()
+                            print(f"Perf output file content: {perf_file_output}")
+                            
+                            for line in perf_file_output.splitlines():
+                                if "Joules" in line and ("energy-pkg" in line or "energy-cores" in line):
+                                    match = re.search(r'\s*([\d,.]+)\s+Joules', line)
+                                    if match:
+                                        value_str = match.group(1).replace(',', '.')
+                                        try:
+                                            self.energy_value = float(value_str)
+                                            print(f"Found energy value in file: {self.energy_value} Joules")
+                                            break
+                                        except ValueError:
+                                            pass
+                except Exception as e:
+                    print(f"Error reading perf output file: {e}")
+            
+            if self.energy_value is None:
+                print("No energy-pkg data found in perf output or file")
             else:
                 print(f"Final energy value: {self.energy_value} Joules")
             
@@ -249,6 +279,14 @@ class EnergyMonitor:
                 print(f"CPU percentage: {self.cpu_percent * 100:.2f}%")
             except Exception as e:
                 print(f"Error getting CPU percentage: {e}")
+                
+            # Clean up temporary files
+            for file_path in [marker_file, f"/tmp/perf_start_{self.process_id}.txt", self.perf_output_file]:
+                try:
+                    if os.path.exists(file_path):
+                        os.remove(file_path)
+                except Exception as e:
+                    print(f"Error removing file {file_path}: {e}")
                 
         except Exception as e:
             print(f"Error stopping perf energy monitoring: {e}")
@@ -266,32 +304,23 @@ class EnergyMonitor:
             'source': 'perf'
         }
         
-        # Add CPU percentage if available
+        # Add CPU percentage if available (for reference only, not for estimation)
         if self.cpu_percent is not None:
             print(f"Using CPU percentage: {self.cpu_percent * 100:.2f}%")
             result['cpu_percent'] = self.cpu_percent
-            
-            # If no energy value from perf, estimate based on CPU usage
-            if self.energy_value is None or self.energy_value == 0:
-                # Typical TDP for a desktop CPU (65W) * CPU usage * duration
-                estimated_energy = 65.0 * self.cpu_percent * duration
-                self.energy_value = estimated_energy
-                result['source'] = 'cpu_estimate'
-                print(f"Using CPU-based energy estimate: {estimated_energy:.2f} Joules")
         
-        # Add energy value if available
+        # Add energy value if available from perf, otherwise set to 0
         if self.energy_value is not None and self.energy_value > 0:
-            print(f"Using measured/estimated energy: {self.energy_value:.2f} Joules")
+            print(f"Using measured energy: {self.energy_value:.2f} Joules")
             result['energy']['pkg'] = self.energy_value
             result['energy']['total'] = self.energy_value
         else:
-            # Last resort fallback - use a very simple estimate
-            fallback_energy = max(duration * 10.0, 0.1)  # At least 0.1 Joules
-            result['energy']['pkg'] = fallback_energy
-            result['energy']['total'] = fallback_energy
-            result['source'] = 'fallback'
-            print(f"Using fallback energy estimate: {fallback_energy:.2f} Joules")
-        
+            # Set energy values to 0 if not available from perf
+            print("No energy data from perf, setting to 0")
+            result['energy']['pkg'] = 0
+            result['energy']['total'] = 0
+            result['source'] = 'none'
+
         print(f"Final energy data: {result}")
         return result
 
@@ -457,6 +486,22 @@ def run_task(task):
         sys_monitor = SystemMonitor(process_id)
         energy_monitor = EnergyMonitor(process_id)
         
+        # Initialize function_name variable
+        function_name = None
+        
+        # Try to read function name from stats file if it already exists
+        if os.path.exists(task.stats_file):
+            logger.info(f"Reading stats file before execution: {task.stats_file}")
+            with open(task.stats_file, 'r') as fid:
+                for line in fid.readlines():
+                    try:
+                        key, value = line.strip().split(" ", 1)
+                        if key == 'function_name':
+                            function_name = value
+                            logger.info(f"Found function name in stats file before execution: {function_name}")
+                    except Exception as e:
+                        logger.error(f"Error processing stats file line before execution: {line} - {e}")
+        
         # Start monitoring
         sys_monitor.start()
         energy_monitor_started = energy_monitor.start()
@@ -469,29 +514,24 @@ def run_task(task):
         sys_monitor.stop()
         if energy_monitor_started:
             energy_monitor.stop()
-        
         logger.debug('JobRunner process finished')
 
-        # Add system monitoring data to call status
         cpu_info = sys_monitor.get_cpu_info()
         call_status.add('worker_func_cpu_usage', cpu_info['usage'])
         call_status.add('worker_func_cpu_system_time', round(cpu_info['system'], 8))
         call_status.add('worker_func_cpu_user_time', round(cpu_info['user'], 8))
-        
-        # Calculate average CPU usage across all cores
+
+        #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        # inigo: Calculate average CPU usage across all cores
         avg_cpu_usage = sum(cpu_info['usage']) / len(cpu_info['usage']) if cpu_info['usage'] else 0
         call_status.add('worker_func_avg_cpu_usage', avg_cpu_usage)
         call_status.add('worker_func_energy_consumption', avg_cpu_usage * round(cpu_info['user'], 8))
+        #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-        # Add estimated energy consumption based on CPU usage
-        call_status.add('worker_func_estimated_energy', avg_cpu_usage * round(cpu_info['user'], 8))
-
-        # Add network I/O data
         net_io = sys_monitor.get_network_io()
         call_status.add('worker_func_sent_net_io', net_io['sent'])
         call_status.add('worker_func_recv_net_io', net_io['recv'])
 
-        # Add memory usage data
         mem_info = sys_monitor.get_memory_info()
         call_status.add('worker_func_rss', mem_info['rss'])
         call_status.add('worker_func_vms', mem_info['vms'])
@@ -506,9 +546,6 @@ def run_task(task):
             call_status.add('worker_func_energy_source', energy_data.get('source', 'unknown'))
             
             # Add CPU percent if available (for CPU-based estimation)
-            # call_status.add('worker_func_energy_cpu_time', energy_data['cpu_time'])
-            # call_status.add('worker_func_energy_cpu_usage', energy_data['cpu_usage'])
-            
             if 'cpu_percent' in energy_data:
                 call_status.add('worker_func_energy_cpu_percent', energy_data['cpu_percent'])
             
@@ -544,12 +581,139 @@ def run_task(task):
             print(f"          {cores_energy_str} Joules power/energy-cores/")
             print()
             
-            # Also write to a file in the task directory for persistence
-            energy_file = os.path.join("/home/bigrobbin/Desktop/TFG/lithops/", 'energy_consumption.txt')
-            with open(energy_file, 'w') as f:
-                f.write("Performance counter stats for 'system wide':\n\n")
-                f.write(f"          {pkg_energy_str} Joules power/energy-pkg/\n")
-                f.write(f"          {cores_energy_str} Joules power/energy-cores/\n")
+            # Store energy consumption data in SQLite database
+            import sqlite3
+            
+            db_file = os.path.join("/home/bigrobbin/Desktop/TFG/lithops/", 'energy_consumption.db')
+            timestamp = time.time()
+            
+            try:
+                conn = sqlite3.connect(db_file)
+                cursor = conn.cursor()
+                
+                # Create energy consumption table
+                create_energy_table = '''
+                CREATE TABLE IF NOT EXISTS energy_consumption (
+                    job_key TEXT,
+                    call_id TEXT,
+                    timestamp REAL,
+                    energy_pkg REAL,
+                    energy_cores REAL,
+                    duration REAL,
+                    source TEXT,
+                    function_name TEXT,
+                    PRIMARY KEY (job_key, call_id)
+                )
+                '''
+                cursor.execute(create_energy_table)
+                
+                # Create CPU usage table to store per-CPU data
+                create_cpu_table = '''
+                CREATE TABLE IF NOT EXISTS cpu_usage (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    job_key TEXT,
+                    call_id TEXT,
+                    cpu_id INTEGER,
+                    cpu_percent REAL,
+                    timestamp REAL,
+                    FOREIGN KEY (job_key, call_id) REFERENCES energy_consumption(job_key, call_id)
+                )
+                '''
+                cursor.execute(create_cpu_table)
+                
+                # Create CPU times table
+                create_cpu_times_table = '''
+                CREATE TABLE IF NOT EXISTS cpu_times (
+                    job_key TEXT,
+                    call_id TEXT,
+                    system_time REAL,
+                    user_time REAL,
+                    timestamp REAL,
+                    PRIMARY KEY (job_key, call_id),
+                    FOREIGN KEY (job_key, call_id) REFERENCES energy_consumption(job_key, call_id)
+                )
+                '''
+                cursor.execute(create_cpu_times_table)
+                
+                # Insert energy consumption data
+                cursor.execute('''
+                    INSERT OR REPLACE INTO energy_consumption 
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                ''', (
+                    task.job_key,
+                    task.call_id,
+                    timestamp,
+                    pkg_energy,
+                    cores_energy,
+                    energy_data['duration'],
+                    energy_data.get('source', 'unknown'),
+                    function_name  # Use the function name from stats file
+                ))
+                
+                # Insert CPU usage data for each CPU core
+                for cpu_id, cpu_percent in enumerate(cpu_info['usage']):
+                    cursor.execute('''
+                        INSERT INTO cpu_usage (job_key, call_id, cpu_id, cpu_percent, timestamp)
+                        VALUES (?, ?, ?, ?, ?)
+                    ''', (
+                        task.job_key,
+                        task.call_id,
+                        cpu_id,
+                        cpu_percent,
+                        timestamp
+                    ))
+                
+                # Insert CPU times data
+                cursor.execute('''
+                    INSERT OR REPLACE INTO cpu_times
+                    VALUES (?, ?, ?, ?, ?)
+                ''', (
+                    task.job_key,
+                    task.call_id,
+                    cpu_info['system'],
+                    cpu_info['user'],
+                    timestamp
+                ))
+                
+                # Also store the formatted output for reference
+                create_formatted_table = '''
+                CREATE TABLE IF NOT EXISTS formatted_output (
+                    job_key TEXT,
+                    call_id TEXT,
+                    timestamp REAL,
+                    output TEXT,
+                    PRIMARY KEY (job_key, call_id)
+                )
+                '''
+                cursor.execute(create_formatted_table)
+                
+                formatted_output = "Performance counter stats for 'system wide':\n\n"
+                formatted_output += f"          {pkg_energy_str} Joules power/energy-pkg/\n"
+                formatted_output += f"          {cores_energy_str} Joules power/energy-cores/\n"
+                
+                cursor.execute('''
+                    INSERT OR REPLACE INTO formatted_output
+                    VALUES (?, ?, ?, ?)
+                ''', (
+                    task.job_key,
+                    task.call_id,
+                    timestamp,
+                    formatted_output
+                ))
+                
+                conn.commit()
+                conn.close()
+                
+                logger.info(f"Energy data stored in SQLite database: {db_file}")
+            except Exception as e:
+                logger.error(f"Error writing energy data to SQLite database: {e}")
+                # Fallback to file-based storage if database fails
+                energy_file = os.path.join("/home/bigrobbin/Desktop/TFG/lithops/", f'energy_consumption_{task.job_key}_{task.call_id}.txt')
+                with open(energy_file, 'w') as f:
+                    f.write("Performance counter stats for 'system wide':\n\n")
+                    f.write(f"          {pkg_energy_str} Joules power/energy-pkg/\n")
+                    f.write(f"          {cores_energy_str} Joules power/energy-cores/\n")
+                logger.info(f"Energy data stored in fallback file: {energy_file}")
 
         if jrp.is_alive():
             # If process is still alive after jr.join(job_max_runtime), kill it
@@ -571,16 +735,47 @@ def run_task(task):
             msg = 'Function exceeded maximum memory and was killed'
             raise MemoryError('HANDLER', msg)
 
+        # Get function name from stats file if available
+        function_name_updated = False
         if os.path.exists(task.stats_file):
+            logger.info(f"Reading stats file after execution: {task.stats_file}")
             with open(task.stats_file, 'r') as fid:
                 for line in fid.readlines():
-                    key, value = line.strip().split(" ", 1)
                     try:
-                        call_status.add(key, float(value))
-                    except Exception:
-                        call_status.add(key, value)
-                    if key in ['exception', 'exc_pickle_fail']:
-                        call_status.add(key, eval(value))
+                        key, value = line.strip().split(" ", 1)
+                        if key == 'function_name':
+                            function_name = value
+                            function_name_updated = True
+                            logger.info(f"Found function name in stats file after execution: {function_name}")
+                            
+                            # Update the function name in the SQLite database
+                            try:
+                                import sqlite3
+                                db_file = os.path.join("/home/bigrobbin/Desktop/TFG/lithops/", 'energy_consumption.db')
+                                conn = sqlite3.connect(db_file)
+                                cursor = conn.cursor()
+                                cursor.execute('''
+                                    UPDATE energy_consumption 
+                                    SET function_name = ?
+                                    WHERE job_key = ? AND call_id = ?
+                                ''', (function_name, task.job_key, task.call_id))
+                                conn.commit()
+                                conn.close()
+                                logger.info(f"Updated function name in SQLite database: {function_name}")
+                            except Exception as e:
+                                logger.error(f"Error updating function name in SQLite database: {e}")
+                        
+                        try:
+                            call_status.add(key, float(value))
+                        except Exception:
+                            call_status.add(key, value)
+                        if key in ['exception', 'exc_pickle_fail']:
+                            call_status.add(key, eval(value))
+                    except Exception as e:
+                        logger.error(f"Error processing stats file line after execution: {line} - {e}")
+            
+            if not function_name_updated:
+                logger.warning("Function name not found in stats file after execution")
 
     except KeyboardInterrupt:
         job_interruped = True

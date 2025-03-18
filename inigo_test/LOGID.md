@@ -19,3 +19,7 @@ https://github.com/menuRivera/logiops/blob/master/logid.cfg
 # commands
 sudo systemctl enable --now logid
 sudo systemctl restart logid
+
+
+# CAMARA: 
+iriunwebcam

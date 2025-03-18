@@ -3,6 +3,14 @@ import subprocess
 import sys
 import time
 import math
+
+import sys
+import os
+ 
+
+# Add parent directory (inigo_test/) to sys.path
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+
 from standarized_measurement_functions import sleep_function, prime_function
  
 

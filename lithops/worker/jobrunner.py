@@ -219,6 +219,9 @@ class JobRunner:
 
             fn_name = func.__name__ if inspect.isfunction(func) \
                 or inspect.ismethod(func) else type(func).__name__
+                
+            # Write function name to stats file for energy consumption tracking
+            self.stats.write('function_name', fn_name)
 
             self.prometheus.send_metric(
                 name='function_start',
