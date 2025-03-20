@@ -623,7 +623,9 @@ def run_task(task):
                     call_status.add(f'worker_func_energy_{metric}', value)
                 
                 # Add total energy consumption (same as energy_cpu for now)
-                call_status.add('worker_func_total_energy', energy_data['energy']['total'])
+                call_status.add('worker_func_perf_energy', energy_data['energy'])
+                call_status.add('worker_func_perf_energy_pkg', energy_data['energy']['pkg'])
+                call_status.add('worker_func_perf_energy_cores', energy_data['energy']['cores'])
                 
                 # Add energy efficiency (energy per time)
                 if energy_data['duration'] > 0:

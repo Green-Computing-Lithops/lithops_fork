@@ -39,8 +39,12 @@ def print_stats(future):
     
     # PERF: added new 
     # print(f"Energy Efficiency: {future.stats.get('worker_func_energy_efficiency', 'N/A')}")
-    print(f"Total Energy: {future.stats.get('worker_func_energy_cpu_percent', 'N/A')}")
-    print(f"Total Energy: {future.stats.get('worker_func_total_energy', 'N/A')}") # perf default
+    print(f"Perf CPU Percentage: {future.stats.get('worker_func_energy_cpu_percent', 'N/A')}")
+    print(f"Perf Energy: {future.stats.get('worker_func_perf_energy', 'N/A')}")
+    print(f"Perf Energy pkg: {future.stats.get('worker_func_perf_energy_pkg', 'N/A')}")
+    print(f"Perf Energy cores: {future.stats.get('worker_func_perf_energy_cores', 'N/A')}")
+ 
+
 
 
 if __name__ == "__main__":
@@ -114,23 +118,25 @@ Average vs suma: calculo
 - empiezan a coincidir valores perf  --> 
 
 
-/* RAPL low level : german no necesario */
+
 
 GERMAN: 
-functions --> entornos que se pueda ejecutar perf o no 
-- que detecte directamentes --> si existe directamente 
+ENERGIA:
+functions --> entornos que se pueda ejecutar perf o no + rapl
+- que detecte directamentes --> si existe directamente --> quiero hacer comparativa 
 - que lo haga lithosp no tu en terminal --> extraer RAPL --> method: TDP / RAPL / PERF
-+ agg energia : 
-
-fuentes de datos de tdp maquinas de computacion mas comunes --> 
-uso cpu + maquina EC2 --> funcion --> maquinas de instancias virtuales : 
+/* RAPL low level : german no necesario  --> podemos usar para comparar con perf, si tienes tiempo lo haces*/
 
 
-Crear base de datos : Firebase + Scraper + N8N diario --> calculos directas 
 
-guardar la energia:
 
--- decir en que maquina es mas eficiente ejecutar metabolomica 
+
+
+
+
+MANRI:
+https://github.com/lithops-cloud/applications/blob/master/montecarlo/pi_estimation/pi_estimation.ipynb
+https://github.com/lithops-cloud/applications/blob/master/mandelbrot/example_mandelbrot.ipynb
 
 
 MAP de lithops --> energia total por todas las funciones 
@@ -143,18 +149,23 @@ medir que paralelismo se ejecuta con menos energia
 ver que paralelismo da menos consumo energetico 
 * plot graph ( x niveles paralelismo / y energy consumption)
 
-MANRI:
-
-https://github.com/lithops-cloud/applications/blob/master/montecarlo/pi_estimation/pi_estimation.ipynb
-https://github.com/lithops-cloud/applications/blob/master/mandelbrot/example_mandelbrot.ipynb
-
-
-
 perf: media vs suma 
 detectar rapl o no 
 analisis energia graph plot --> paralelismos ( x niveles paralelismo / y energy consumption)
 --> analisis energetico --> 
 
+
+
+
++ agg energia : 
+
+fuentes de datos de tdp maquinas de computacion mas comunes --> 
+uso cpu + maquina EC2 --> funcion --> maquinas de instancias virtuales : 
+
+Crear base de datos : Firebase + Scraper + N8N diario --> calculos directas 
+
+guardar la energia:
+-- decir en que maquina es mas eficiente ejecutar metabolomica 
 
 base de datos CPU: 
 https://www.cpu-world.com/CPUs/Xeon/Intel-Xeon%208275CL.html
