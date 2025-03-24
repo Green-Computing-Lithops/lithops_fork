@@ -22,6 +22,7 @@ source venv/bin/activate
 python --version
 pip list
 pip install -r requirements.txt // not allways necessary
+pip install setup.py
 
 ### install lithops: 
 pip install lithops

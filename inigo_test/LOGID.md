@@ -23,3 +23,13 @@ sudo systemctl restart logid
 
 # CAMARA: 
 iriunwebcam
+
+
+# elementos extraer claves 
+wmic memorychip get manufacturer, partnumber, speed, capacity
+
+Get-CimInstance Win32_PhysicalMemory | Select-Object Manufacturer, PartNumber, Speed, Capacity, SerialNumber
+
+
+Clave de producto de Windows:PowerShell
+(Get-WmiObject -query 'select * from SoftwareLicensingService').OA3xOriginalProductKey

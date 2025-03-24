@@ -40,6 +40,7 @@ def print_stats(future):
     # PERF: added new 
     # print(f"Energy Efficiency: {future.stats.get('worker_func_energy_efficiency', 'N/A')}")
     print(f"Perf CPU Percentage: {future.stats.get('worker_func_energy_cpu_percent', 'N/A')}")
+
     print(f"Perf Energy: {future.stats.get('worker_func_perf_energy', 'N/A')}")
     print(f"Perf Energy pkg: {future.stats.get('worker_func_perf_energy_pkg', 'N/A')}")
     print(f"Perf Energy cores: {future.stats.get('worker_func_perf_energy_cores', 'N/A')}")
@@ -103,128 +104,25 @@ CPU User Time: 12163.19
 CPU Usage Average: 6.464285714285714 // suma en vez de caluclo 1600% --> 
 Energy Consumption: 78626.33535714286
 
--- funciona  calculo base: 
-* lithops vs local --> energia cambia --> 
-
-
--- perf : 
-storage de los valores --> al finalizar el proceso 
-calculo general 
-
-timeout --> parar el cpu 
-
-
-Average vs suma: calculo 
-- empiezan a coincidir valores perf  --> 
-
-
-
-
-GERMAN: 
-ENERGIA:
-functions --> entornos que se pueda ejecutar perf o no + rapl
-- que detecte directamentes --> si existe directamente --> quiero hacer comparativa 
-- que lo haga lithosp no tu en terminal --> extraer RAPL --> method: TDP / RAPL / PERF
-/* RAPL low level : german no necesario  --> podemos usar para comparar con perf, si tienes tiempo lo haces*/
+ 
 
 
 
 
 
-
-
-
-MANRI:
-https://github.com/lithops-cloud/applications/blob/master/montecarlo/pi_estimation/pi_estimation.ipynb
-https://github.com/lithops-cloud/applications/blob/master/mandelbrot/example_mandelbrot.ipynb
-
-
-MAP de lithops --> energia total por todas las funciones 
- --> una applicacion de lithos 
-
-medir que paralelismo se ejecuta con menos energia 
---> kpi : optimizacion kpi estimator --> optimizar para energia en local 
---> Codigo de ejemplo : 
-
-ver que paralelismo da menos consumo energetico 
-* plot graph ( x niveles paralelismo / y energy consumption)
-
-perf: media vs suma 
-detectar rapl o no 
-analisis energia graph plot --> paralelismos ( x niveles paralelismo / y energy consumption)
---> analisis energetico --> 
-
-
-
-
-+ agg energia : 
-
-fuentes de datos de tdp maquinas de computacion mas comunes --> 
-uso cpu + maquina EC2 --> funcion --> maquinas de instancias virtuales : 
-
-Crear base de datos : Firebase + Scraper + N8N diario --> calculos directas 
-
-guardar la energia:
--- decir en que maquina es mas eficiente ejecutar metabolomica 
-
-base de datos CPU: 
-https://www.cpu-world.com/CPUs/Xeon/Intel-Xeon%208275CL.html
-https://www.cpu-world.com/CPUs/SoC.html
 
 
 POWERAPI EXTRA: 
-
 https://blog.theodo.com/2020/09/power-api-deep-dive/
-
 https://www.sciencedirect.com/science/article/pii/S1389128624002032
 
 
 
 
 
-AWS services migrando a AMD: 
-https://d1.awsstatic.com/events/Summits/nycsummit2023/PRT208-S_AMD_CostOptimizedScaling_E1_20230712_HCEdited.pdf
-
-
-
-ya han hablado de crear un dataset: 
-https://www.apiscene.io/sustainability/building-an-aws-ec2-carbon-emissions-dataset/
-
-On modern Intel CPUs, we have access to RAPL, Running Average Power Limit, an interface that gives access to a set of counters, giving energy and power consumption information. Using Turbostat, a tool by Intel, we can get the CPU TDP (Thermal Design Power). According to Intel, it refers to the power consumption under the maximum theoretical load. So it’s supposed to be the maximum sustainable power consumption for the CPU. This is especially useful because, on AWS, we use custom-made CPUs, which means that even if we can get the CPU model using a simple LS CPU comment on the terminal, we will never find any public information about this CPU model online. But most importantly, the tool gives us access to the CPU’s power consumption and the machine’s memory.
-* Turbostat, a tool by Intel, we can get the CPU TDP (Thermal Design Power).
-
-El tio sigue con el dataset: 
-https://medium.com/teads-engineering/building-an-aws-ec2-carbon-emissions-dataset-3f0fd76c98ac
-
-ha montado una base de datoas: 
-https://doc.api.boavizta.org/getting_started/cpu_component/
-https://docs.google.com/spreadsheets/d/1DqYgQnEDLQVQm5acMAhLgHLD8xXCG9BIrk-_Nv6jF3k/edit?gid=224728652#gid=224728652
-estimator: 
-
-https://medium.com/@benjamin.davy
-
-
-
-You need to identify make and model of as much of the hardware as you can. Things that consume electricity such as the CPU, chipset/motherboard, and the power supply unit (or its equivalent). I presume you are talking about EC2. If you log into a Linux EC2, try the command "lshw." It will list hardware info. Also, search for "linux list hardward" for more commands. Then the manufacturer of each subcomponent should have datasheets that detail the power requirements of its products
-
-
-
-https://sustainability.aboutamazon.com/products-services/aws-cloud
-
-
-
-antiguo pero bueno: https://medium.com/teads-engineering/evaluating-the-carbon-footprint-of-a-software-platform-hosted-in-the-cloud-e716e14e060c
-
-
-
-
-
-
 AUX COMMANDS: 
-
 sqlite3 /home/bigrobbin/Desktop/TFG/lithops/energy_consumption.db "SELECT * FROM energy_consumption"
 sqlite3 /home/bigrobbin/Desktop/TFG/lithops/energy_consumption.db "SELECT AVG(energy_pkg) FROM energy_consumption"
-
 sqlite3 /home/bigrobbin/Desktop/TFG/lithops/energy_consumption.db "drop table energy_consumption"
 
 
@@ -242,21 +140,6 @@ FROM energy_consumption e
 JOIN cpu_usage c ON e.job_key = c.job_key AND e.call_id = c.call_id
 GROUP BY e.function_name, c.cpu_id
 ORDER BY e.function_name, c.cpu_id;
-
-
-
-Alternatively, you could use a different approach for measuring energy consumption that doesn't require sudo, such as using the RAPL interface directly through sysfs.
-
-
-
-
-
-
-
-
-
-
-
 
 
 
@@ -291,4 +174,15 @@ MAP FUNCTION SLEEP
              30,29 Joules power/energy-cores/                                                   
 
        8,012292576 seconds time elapsed
+
+
+
+
+
+
+
+
+
+
+
 """
