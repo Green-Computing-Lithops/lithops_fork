@@ -37,11 +37,12 @@ def measure_scenario(scenario):
 
 if __name__ == "__main__":
     # When an argument is provided, run the corresponding scenario.
+    value_tested = 5 
     if len(sys.argv) > 1:
         if sys.argv[1] == "scenario1":
-            sleep_function(4)
+            sleep_function(value_tested)
         elif sys.argv[1] == "scenario2": # MAX PRIME 6249989 
-            max_prime =prime_function(4)
+            max_prime =prime_function(value_tested)
             print(f"Max Prime: {max_prime}")
         else:
             print("Unknown scenario argument. Use 'scenario1' or 'scenario2'.")
@@ -50,3 +51,20 @@ if __name__ == "__main__":
         # Measure each scenario by calling the script via perf.
         measure_scenario("scenario1")
         measure_scenario("scenario2")
+
+
+"""
+Result to compare with lithops
+
+prime number 4 ( with scale )
+    1.774,95 Joules power/energy-pkg/                                                     
+    1.433,12 Joules power/energy-pkg/ 
+    
+prime number 5 ( with scale ) --> tarda bastante mas 
+    1.774,95 Joules power/energy-pkg/      
+
+
+
+
+
+"""

@@ -6,6 +6,7 @@
     - https://www.cpu-world.com/CPUs/Xeon/Intel-Xeon%208275CL.html
     - https://www.cpu-world.com/CPUs/SoC.html
 
+* https://ionutbalosin.com/2023/07/analyzing-jvm-energy-consumption-for-jdk-17-an-empirical-study/#:~:text=DRAM%20domain%2C%20utilizing%20diverse%20systems,precision%20compared%20to%20earlier%20generations
 
 * ya han hablado de crear un dataset: https://www.apiscene.io/sustainability/building-an-aws-ec2-carbon-emissions-dataset/
     - On modern Intel CPUs, we have access to RAPL, Running Average Power Limit, an interface that gives access to a set of counters, giving energy and power consumption information. Using Turbostat, a tool by Intel, we can get the CPU TDP (Thermal Design Power). According to Intel, it refers to the power consumption under the maximum theoretical load. So it’s supposed to be the maximum sustainable power consumption for the CPU. This is especially useful because, on AWS, we use custom-made CPUs, which means that even if we can get the CPU model using a simple LS CPU comment on the terminal, we will never find any public information about this CPU model online. But most importantly, the tool gives us access to the CPU’s power consumption and the machine’s memory.

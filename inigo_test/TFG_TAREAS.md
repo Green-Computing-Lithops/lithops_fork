@@ -76,3 +76,102 @@
 
 ## SEMANA 7: viernes 4 no reunion 
 
+
+
+# reunion: 
+virtualizaciones sobre maquinas --> caso de que tiene no tienes acceso a rapl
+* no RAPL
+
+baremetal: rapl --> nadie mas ejecutando el servidor 
+* worker vs funcion: 
+worker: unidad logica que te permite ejecurar una funcion dentro 
+
+worker puede pasar que todas las funciones se estan ejecutando 
+4 maquinas virtuales --> 4 worker --> 100 funciones --> cada una de las 25 funciones 
+TDP --> energia de todo el host / no de la funcion completa 
+* formula computo total y dividir por numero de funciones que tiene el worker 
+* consumo energia funcion de pipeline --> 
+* practica valores agregados --> llamada de workers paralelos --
+
+
+PASO POSTERIOR:
+optimizar por pipelines 
+por detras: algoritmo de normalizacion de datos comparativa ejecuciones pasadas 
+
+comparar : algoritmo de normalizacion en base de lo que ha pasado anterior 
+
+
+# MANRI : 
+1. Minio: plataforma de objet storage de codigo abierto --> docker --> hacer pruebas 
+    * ejecutar deployment de minio en local con docker --> chagpt en un unico comando 
+2. flexecutor: plataforma jolteon --> adaptar / plataforma estructurada donde queda mas facil llevar a cabo operaciones 
+    - profiling: pi_montecarlo --> directiva que permite lanzar pipeline de ejecucion con diferentes configuraciones 
+    - output guarda ejecucion de tiempo de ejecucion : 
+    - Trainign que permite tomar estos profiling --> entrenar modelos predictivos que nos pueden recomendar las mejora de los tiempos futuros --> predicting 
+    - Accesso manri : finales de verano / algun bug --> ajustes --> preguntar 
+
+3. Predicting: que ejecucion tiene el menor coste, introducir la menor parte de la energia 
+* deployment de minio --> lanzar en local los casos de uso 
+- link con todos los datos para poder lanzar los pipelines 
+
+mini: ejemplos -- dag_execurion 
+dag_profiling.py : importante --> lo mas encapsulada posible stages de computacione y ejecutan todas un mismo codigo 
+
+
+con flexecutor: tener el ciclo cerrado que sea end to end 
+* sintaxis de 
+despues de ejecucion de profiling --> tiempo y ejecuciones 
+* cuando tengamos eso vemos como optimizar --> tener ahi la energia 
+* discriminador para cual optimizar cada approach ? 
+flexecutor: TDP / rapl --> cuando escriba las diferentes metricas escriba tambien las metricas de energia 
+flexecutor: ofrecer de manera clara smart provisioning que lithops no ofrece
+lithops ofrece las capacidades , pero sin la nocion de optimizacion 
+libreria
+* aportar las directrivas de optimizacion
+* optimizar los resultados de optimizacion 
+cuando ejecutamos --> nos explica como funciona cada uno para 
+
+iteraciones que cada una hace diferencte --> explicar jolteon 
+tiempo / energia / 
+def optimize(self): --> optimiza el pipeline con todos los predict que tiene y coge las opciones que mas te favorece 
+
+
+punto clave esta semans 
+dag_profiling : 
+hito bastante guay y hacer la optimizacion real -> cloud -> cargas interesantes -> opciones reales 
+
+
+# conexion para hacer el end to end 
+en funcion de los resultados que existen 
+* todos los papers de jolteon los optimicemos por energia --> ml / nl / video 
+* listos para lanzar 
+
+TFG 
+jolteon : 
+reiterar sobre algo existente 
+
+tfm: 
+pensar despues para tener un valor nuevo --> las piensas cuando ya tienes un resultado 
+con iterar con un algorimo nuevo --> tfm 
+
+32 paginas : experiencia no copypaste 
+no pages 
+secciones con hablar con ciertos elementos 
+tfg documento --> claro
+super conciso --> primer nivel 12 paginas de maximo nivel --> 
+estructura tfg resultadista --> anexo lo que sea 
+
+minimo integracion flexecutor y caso optimizacion maximo 
+
+preguntar jolteon : 
+
+mas facil introducirse si esta poco explotado 
+estas cargando con trabajo de manri y german --> no les hagas perder el tiempo 
+
+
+
+
+
+
+
+

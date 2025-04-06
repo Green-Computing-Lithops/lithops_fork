@@ -1,5 +1,11 @@
 
-
+# LINKS DE INTERES:
+https://webtv.univ-lille.fr/video/11485/experimenting-software-defined-power-meters-with-powerapi
+https://docs.openeuler.org/en/docs/22.03_LTS_SP4/docs/powerapi/development_using_powerapi.html
+https://powerapi.org/getting_started/
+https://powerapi.org/reference/cgroup/cgroup/
+https://github.com/powerapi-ng/powerapi/tree/master
+https://blog.ptidej.net/using-powerapi-to-measure-the-energy-consumption-of-your-device/
 
 
 # instal hcp
