@@ -37,7 +37,7 @@ def measure_scenario(scenario):
 
 if __name__ == "__main__":
     # When an argument is provided, run the corresponding scenario.
-    value_tested = 5 
+    value_tested = 4
     if len(sys.argv) > 1:
         if sys.argv[1] == "scenario1":
             sleep_function(value_tested)

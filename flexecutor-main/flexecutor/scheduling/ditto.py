@@ -1,8 +1,8 @@
 import math
 
-from modelling.perfmodel import PerfModelEnum
-from scheduling.scheduler import Scheduler
-from utils.dataclass import StageConfig
+from flexecutor.modelling.perfmodel import PerfModelEnum
+from flexecutor.scheduling.scheduler import Scheduler
+from flexecutor.utils.dataclass import StageConfig
 
 
 class VirtualStage:
@@ -151,6 +151,34 @@ class Ditto(Scheduler):
             param_a_dict[stage.stage_id] = param_a
         sum_a = sum(param_a_dict.values())
         self.parallelism_ratios = {k: v / sum_a for k, v in param_a_dict.items()}
+        
+    def _schedule_for_energy(self):
+        """
+        Schedule for energy optimization.
+        This method distributes workers based on the energy consumption parameters of each stage.
+        Stages with higher energy consumption get proportionally fewer workers to minimize overall energy usage.
+        """
+        energy_dict = {}
+        # Get energy consumption parameters for each stage
+        for stage in self._dag.stages:
+            # Use predict_time to get energy consumption estimate for a standard configuration
+            standard_config = StageConfig(cpu=1, memory=1024, workers=1)
+            predicted_times = stage.perf_model.predict_time(standard_config)
+            
+            # If energy_consumption is available, use it; otherwise, estimate based on execution time
+            if predicted_times.energy_consumption is not None:
+                energy = predicted_times.energy_consumption
+            else:
+                # Fallback: estimate energy based on execution time (higher time = higher energy)
+                energy = predicted_times.total
+                
+            # Invert the energy value - stages with higher energy consumption get fewer workers
+            # Use square root to moderate the effect
+            energy_dict[stage.stage_id] = 1.0 / math.sqrt(max(energy, 0.001))
+            
+        # Normalize to get ratios
+        sum_energy = sum(energy_dict.values())
+        self.parallelism_ratios = {k: v / sum_energy for k, v in energy_dict.items()}
 
     def _schedule_for_latency(self):
         if len(self.leafs) != 1:
@@ -248,6 +276,8 @@ class Ditto(Scheduler):
             self._schedule_for_latency()
         elif obj == "cost":
             self._schedule_for_cost()
+        elif obj == "energy":
+            self._schedule_for_energy()
         else:
             raise ValueError("Invalid objective")
 

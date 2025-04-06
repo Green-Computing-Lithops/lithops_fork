@@ -1,9 +1,12 @@
 from abc import abstractmethod, ABC
 from enum import Enum
-from typing import Dict
+from typing import Dict, TYPE_CHECKING
 
 from flexecutor.utils.dataclass import FunctionTimes, StageConfig
 from flexecutor.utils.utils import get_my_exec_path
+
+if TYPE_CHECKING:
+    from flexecutor.workflow.stage import Stage
 
 
 class PerfModelEnum(Enum):
@@ -14,7 +17,7 @@ class PerfModelEnum(Enum):
 
 
 class PerfModel(ABC):
-    def __init__(self, model_type, stage):
+    def __init__(self, model_type, stage: "Stage"):
         model_name = stage.stage_unique_id or "default"
         model_dst = get_my_exec_path() + "/models/" + model_name + ".pkl"
 
@@ -39,6 +42,26 @@ class PerfModel(ABC):
     @abstractmethod
     def predict_time(self, config: StageConfig) -> FunctionTimes:
         raise NotImplementedError
+        
+    def generate_func_code(self, objective: str) -> str:
+        """
+        Generate function code for the objective function.
+        
+        Args:
+            objective (str): The objective to generate code for. Can be "latency", "cost", or "energy".
+            
+        Returns:
+            str: The generated function code.
+        """
+        if objective not in ["latency", "cost", "energy"]:
+            raise ValueError(f"Invalid objective: {objective}")
+            
+        if objective == "energy":
+            # Generate code for energy consumption
+            return f"coeffs_list[{self._stage_idx}][0] / (cpu(config_list[{self._stage_idx}]) * workers(config_list[{self._stage_idx}])) + coeffs_list[{self._stage_idx}][1]"
+        else:
+            # Default implementation for latency and cost
+            return f"coeffs_list[{self._stage_idx}][0] / (cpu(config_list[{self._stage_idx}]) * workers(config_list[{self._stage_idx}])) + coeffs_list[{self._stage_idx}][1]"
 
     # @abstractmethod
     # def optimize(self, config: ConfigBounds) -> StageConfig:
@@ -78,20 +101,15 @@ class PerfModel(ABC):
         model_type = model_type.value
         if model_type == PerfModelEnum.ANALYTIC.value:
             from flexecutor.modelling.anaperfmodel import AnaPerfModel
-
             return AnaPerfModel(stage)
         elif model_type == PerfModelEnum.GENETIC.value:
             from flexecutor.modelling.gaperfmodel import GAPerfModel
-
             return GAPerfModel(stage)
         elif model_type == PerfModelEnum.DISTRIBUTION.value:
             from flexecutor.modelling.distperfmodel import DistPerfModel
-
             return DistPerfModel(stage)
-
         elif model_type == PerfModelEnum.MIXED.value:
             from flexecutor.modelling.mixedperfmodel import MixedPerfModel
-
             return MixedPerfModel(stage)
         else:
             raise ValueError("Invalid model type")

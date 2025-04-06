@@ -39,5 +39,18 @@ class StageFuture:
             host_submit_tstamp = s["host_submit_tstamp"]
             worker_start_tstamp = s["worker_start_tstamp"]
             r.cold_start = worker_start_tstamp - host_submit_tstamp
+            
+            # Extract energy consumption if available
+            if "worker_func_energy_consumption" in s:
+                r.energy_consumption = s["worker_func_energy_consumption"]
+            elif "worker_func_perf_energy" in s and isinstance(s["worker_func_perf_energy"], dict) and "total" in s["worker_func_perf_energy"]:
+                r.energy_consumption = s["worker_func_perf_energy"]["total"]
+            elif "worker_func_perf_energy_pkg" in s:
+                r.energy_consumption = s["worker_func_perf_energy_pkg"]
+            
+            # Log the energy consumption for debugging
+            if r.energy_consumption is not None:
+                print(f"Energy consumption for {self.__stage_id}: {r.energy_consumption} Joules")
+            
             timings_list.append(r)
         return timings_list

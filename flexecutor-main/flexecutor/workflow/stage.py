@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 from enum import Enum
-from typing import Any, Set, List, Optional, Callable
+from typing import Any, Set, List, Optional, Callable, TYPE_CHECKING
 
 from lithops import FunctionExecutor
 
+if TYPE_CHECKING:
+    from flexecutor.modelling.perfmodel import PerfModel
 from flexecutor.modelling.perfmodel import PerfModel, PerfModelEnum
 from flexecutor.storage.storage import FlexData
 from flexecutor.utils.dataclass import StageConfig

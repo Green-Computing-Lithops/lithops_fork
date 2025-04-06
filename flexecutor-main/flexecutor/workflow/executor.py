@@ -16,7 +16,11 @@ from flexecutor.workflow.dag import DAG
 from flexecutor.workflow.processors import ThreadPoolProcessor
 from flexecutor.workflow.stage import Stage, StageState
 from flexecutor.workflow.stagefuture import StageFuture
-from scheduling.scheduler import Scheduler
+from flexecutor.scheduling.scheduler import Scheduler
+
+# MODIFICAR PRINCIPALMENTE EL PROFILING --> NO CENTRARSE STOR 
+# MODIFICAR => REGISTRAR TIEMPOS Y ENERGIA 
+# * MINIMO ESTE FINDE PLOT GRAFICO DE ENERGIA --> NO MOSTRAR OPTIMIZACION --> SOLO CONFIGURACIONES 
 
 logger = logging.getLogger(__name__)
 

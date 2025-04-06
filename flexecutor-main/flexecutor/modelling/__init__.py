@@ -1,2 +1,1 @@
-from .anaperfmodel import AnaPerfModel
-from .gaperfmodel import GAPerfModel
+# Empty __init__.py to avoid circular imports

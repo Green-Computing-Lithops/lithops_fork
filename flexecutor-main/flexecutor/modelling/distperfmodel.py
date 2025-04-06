@@ -1,10 +1,12 @@
-from typing import Dict
+from typing import Dict, TYPE_CHECKING
 
 import numpy as np
 
-from modelling.perfmodel import PerfModel
-from utils.dataclass import StageConfig, FunctionTimes
-from workflow.stage import Stage
+from flexecutor.modelling.perfmodel import PerfModel
+from flexecutor.utils.dataclass import StageConfig, FunctionTimes
+
+if TYPE_CHECKING:
+    from flexecutor.workflow.stage import Stage
 
 
 class Distribution:
@@ -142,7 +144,7 @@ class Distribution:
 
 
 class DistPerfModel(PerfModel):
-    def __init__(self, stage: Stage):
+    def __init__(self, stage: "Stage"):
         super().__init__("distribution", stage)
 
         self.distributions = {}  # k*d -> Distribution

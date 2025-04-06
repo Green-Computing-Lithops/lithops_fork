@@ -1,13 +1,16 @@
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import Dict
+from typing import Dict, TYPE_CHECKING
 
 import numpy as np
 import scipy.optimize as scipy_opt
 from overrides import overrides
 
-from modelling.perfmodel import PerfModel
-from utils.dataclass import StageConfig, FunctionTimes
+from flexecutor.modelling.perfmodel import PerfModel
+from flexecutor.utils.dataclass import StageConfig, FunctionTimes
+
+if TYPE_CHECKING:
+    from flexecutor.workflow.stage import Stage
 
 
 class ModelStrategy(ABC):
@@ -428,7 +431,47 @@ class MixedPerfModel(PerfModel, GetAndSet):
         self.k_d = self.k_d.reshape(-1, 2).T
 
     def predict_time(self, config: StageConfig) -> FunctionTimes:
-        pass
+        """
+        Predict the execution time and energy consumption for a given configuration.
+        
+        Args:
+            config (StageConfig): The resource configuration.
+            
+        Returns:
+            FunctionTimes: The predicted execution times and energy consumption.
+        """
+        # Calculate the variables
+        num_workers = config.workers if self.allow_parallel else 1
+        num_vcpu = eq_vcpu_alloc(config.memory, num_workers)
+        
+        # Calculate the predicted times
+        cold_time = np.mean(self.params_avg.cold)
+        
+        if self.allow_parallel:
+            read_time = io_func(num_workers, *self.params_avg.read) if not self.can_intra_parallel.read else io_func(num_vcpu * num_workers, *self.params_avg.read)
+            compute_time = comp_func(num_workers, *self.params_avg.compute) if not self.can_intra_parallel.compute else comp_func(num_vcpu * num_workers, *self.params_avg.compute)
+            write_time = io_func(num_workers, *self.params_avg.write) if not self.can_intra_parallel.write else io_func(num_vcpu * num_workers, *self.params_avg.write)
+        else:
+            read_time = io_func(num_vcpu, *self.params_avg.read) if not self.parent_relevant else io_func_pr([num_vcpu, num_workers], *self.params_avg.read)
+            compute_time = comp_func(num_vcpu, *self.params_avg.compute)
+            write_time = io_func(num_vcpu, *self.params_avg.write)
+        
+        total_time = cold_time + read_time + compute_time + write_time
+        
+        # Estimate energy consumption based on the model parameters
+        # Energy consumption is proportional to CPU usage and execution time
+        # We use a simple model: energy = k * num_vcpu * num_workers * total_time
+        # where k is a constant factor (can be calibrated based on real measurements)
+        energy_consumption = 0.1 * num_vcpu * num_workers * total_time
+        
+        return FunctionTimes(
+            total=total_time,
+            read=read_time,
+            compute=compute_time,
+            write=write_time,
+            cold_start=cold_time,
+            energy_consumption=energy_consumption
+        )
 
     @overrides
     def load_model(self):
@@ -476,7 +519,7 @@ class MixedPerfModel(PerfModel, GetAndSet):
         config_list = "config_list"
         coeffs_list = "coeffs_list"
 
-        assert mode in ["latency", "cost"]
+        assert mode in ["latency", "cost", "energy"]
 
         stage_idx = int(self._stage_idx)
         cold_param = f"{coeffs_list}[{stage_idx}][cold]"
@@ -502,10 +545,15 @@ class MixedPerfModel(PerfModel, GetAndSet):
             code += f"{logx_param}*np.log({var_k})/{var_k} + {x2_param}/{var_k}**2 + {const_param}"
         if mode == "latency":
             code = f"{cold_param} + {code}"
-        else:
+        elif mode == "cost":
             # 1792 / 1024 * 0.0000000167 * 1000 = 0.000029225
             # 1000 is to convert from ms to s
             # We multiply 1e5 to the cost to make it more readable
             # s = cold_param + ' / 2 + ' + s
             code = f"({code}) * {var_k} * {var_d} * 2.9225 + 0.02 * {var_d}"
+        elif mode == "energy":
+            # Energy consumption is proportional to CPU usage and execution time
+            # We use a simple model: energy = k * num_vcpu * num_workers * execution_time
+            # where k is a constant factor (can be calibrated based on real measurements)
+            code = f"0.1 * {var_k} * {var_d} * ({cold_param} + {code})"
         return code
