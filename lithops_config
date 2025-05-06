@@ -14,7 +14,7 @@ lithops:
     #log_filename <path_to_a_file>
 
 localhost:
-    # runtime: docker.io/lithopscloud/ibmcf-python-v312  # la has liado por comentar esto en no aceptado 
+    runtime: docker.io/lithopscloud/ibmcf-python-v312
     # https://github.com/lithops-cloud/lithops/blob/master/docs/source/compute_config/localhost.md 
     
     worker_processes: CPU_COUNT
