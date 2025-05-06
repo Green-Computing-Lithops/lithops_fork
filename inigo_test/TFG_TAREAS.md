@@ -104,6 +104,7 @@ comparar : algoritmo de normalizacion en base de lo que ha pasado anterior
 # MANRI : 
 1. Minio: plataforma de objet storage de codigo abierto --> docker --> hacer pruebas 
     * ejecutar deployment de minio en local con docker --> chagpt en un unico comando 
+    * flexecutor --> ejecutar 
 2. flexecutor: plataforma jolteon --> adaptar / plataforma estructurada donde queda mas facil llevar a cabo operaciones 
     - profiling: pi_montecarlo --> directiva que permite lanzar pipeline de ejecucion con diferentes configuraciones 
     - output guarda ejecucion de tiempo de ejecucion : 
@@ -175,3 +176,11 @@ estas cargando con trabajo de manri y german --> no les hagas perder el tiempo
 
 
 
+ # prompt : 
+ im creating a library using minion as a base, the library is in the path flexecutor-main, inside it i have 
+
+ al ejecutar el profile tenemos un output de la energia 
+
+
+ 
+ change the flexecutor-main/flexecutor/workflow/executor.py  --> profile funtion to storage the energy consumption and include in the json output keeping the format of 

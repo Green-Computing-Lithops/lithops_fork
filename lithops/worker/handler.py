@@ -211,7 +211,10 @@ class EnergyMonitor:
             
             # Send SIGINT to perf to make it output the results
             import signal
-            os.kill(self.perf_process.pid, signal.SIGINT)
+            try:
+                os.kill(self.perf_process.pid, signal.SIGINT)
+            except Exception as e:
+                print(f"Error sending SIGINT to perf process: {e}")
             
             # Wait for the process to exit
             try:
@@ -278,49 +281,53 @@ class EnergyMonitor:
                 
                 # Run a direct perf command for a CPU-intensive task
                 # This will give us a better baseline than sleep
-                cmd = f"sudo perf stat -e {energy_events} -a python3 -c 'for i in range(10000000): pass' 2>&1"
+                venv_python = os.path.join(os.path.expanduser("~"), "Desktop", "git", "lithops_fork", "venv", "bin", "python")
+                cmd = f"sudo perf stat -e {energy_events} -a {venv_python} -c 'for i in range(10000000): pass' 2>&1"
                 print(f"Running command: {cmd}")
                 
-                result = subprocess.run(
-                    cmd,
-                    shell=True,
-                    stdout=subprocess.PIPE,
-                    stderr=subprocess.STDOUT,
-                    text=True,
-                    check=False
-                )
-                
-                # Get the output
-                output = result.stdout
-                print(f"Direct command output: {output}")
-                
-                # Process the output to extract energy values
-                for line in output.splitlines():
-                    print(f"Processing line: {line}")
-                    if "Joules" in line:
-                        match = re.search(r'\s*([\d,.]+)\s+Joules\s+(\S+)', line)
-                        if match:
-                            value_str = match.group(1).replace(',', '.')
-                            event_name = match.group(2)
-                            try:
-                                # Handle numbers with multiple dots (e.g. 1.043.75 -> 1043.75)
-                                if value_str.count('.') > 1:
-                                    parts = value_str.split('.')
-                                    value_str = ''.join(parts[:-1]) + '.' + parts[-1]
-                                    print(f"Converted malformed value with multiple dots to {value_str}")
-                                
-                                energy_value = float(value_str)
-                                print(f"Found energy value: {energy_value} Joules for {event_name}")
-                                
-                                # Store the value based on the event type
-                                if "energy-pkg" in event_name:
-                                    self.energy_pkg = energy_value
-                                    print(f"Stored energy-pkg value: {self.energy_pkg} Joules")
-                                elif "energy-cores" in event_name:
-                                    self.energy_cores = energy_value
-                                    print(f"Stored energy-cores value: {self.energy_cores} Joules")
-                            except ValueError as e:
-                                print(f"Could not convert '{value_str}' to float: {e}")
+                try:
+                    result = subprocess.run(
+                        cmd,
+                        shell=True,
+                        stdout=subprocess.PIPE,
+                        stderr=subprocess.STDOUT,
+                        text=True,
+                        check=False
+                    )
+                    
+                    # Get the output
+                    output = result.stdout
+                    print(f"Direct command output: {output}")
+                    
+                    # Process the output to extract energy values
+                    for line in output.splitlines():
+                        print(f"Processing line: {line}")
+                        if "Joules" in line:
+                            match = re.search(r'\s*([\d,.]+)\s+Joules\s+(\S+)', line)
+                            if match:
+                                value_str = match.group(1).replace(',', '.')
+                                event_name = match.group(2)
+                                try:
+                                    # Handle numbers with multiple dots (e.g. 1.043.75 -> 1043.75)
+                                    if value_str.count('.') > 1:
+                                        parts = value_str.split('.')
+                                        value_str = ''.join(parts[:-1]) + '.' + parts[-1]
+                                        print(f"Converted malformed value with multiple dots to {value_str}")
+                                    
+                                    energy_value = float(value_str)
+                                    print(f"Found energy value: {energy_value} Joules for {event_name}")
+                                    
+                                    # Store the value based on the event type
+                                    if "energy-pkg" in event_name:
+                                        self.energy_pkg = energy_value
+                                        print(f"Stored energy-pkg value: {self.energy_pkg} Joules")
+                                    elif "energy-cores" in event_name:
+                                        self.energy_cores = energy_value
+                                        print(f"Stored energy-cores value: {self.energy_cores} Joules")
+                                except ValueError as e:
+                                    print(f"Could not convert '{value_str}' to float: {e}")
+                except Exception as e:
+                    print(f"Error running direct command: {e}")
             
             # Get CPU percentage for the process
             try:
@@ -664,7 +671,12 @@ def run_task(task):
             # Store energy consumption data in SQLite database
             import sqlite3
             
-            db_file = os.path.join("/home/bigrobbin/Desktop/TFG/lithops/", 'energy_consumption.db')
+            # Create the directory if it doesn't exist - use a directory that definitely exists
+            energy_dir = os.path.join(LITHOPS_TEMP_DIR, "energy_data")
+            os.makedirs(energy_dir, exist_ok=True)
+
+            # Use the temporary directory for the database file
+            db_file = os.path.join(energy_dir, 'energy_consumption.db')
             timestamp = time.time()
             
             try:
@@ -699,190 +711,4 @@ def run_task(task):
                     FOREIGN KEY (job_key, call_id) REFERENCES energy_consumption(job_key, call_id)
                 )
                 '''
-                cursor.execute(create_cpu_table)
-                
-                # Create CPU times table
-                create_cpu_times_table = '''
-                CREATE TABLE IF NOT EXISTS cpu_times (
-                    job_key TEXT,
-                    call_id TEXT,
-                    system_time REAL,
-                    user_time REAL,
-                    timestamp REAL,
-                    PRIMARY KEY (job_key, call_id),
-                    FOREIGN KEY (job_key, call_id) REFERENCES energy_consumption(job_key, call_id)
-                )
-                '''
-                cursor.execute(create_cpu_times_table)
-                
-                # Insert energy consumption data
-                cursor.execute('''
-                    INSERT OR REPLACE INTO energy_consumption 
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                ''', (
-                    task.job_key,
-                    task.call_id,
-                    timestamp,
-                    pkg_energy,
-                    cores_energy,
-                    energy_data['duration'],
-                    energy_data.get('source', 'unknown'),
-                    function_name  # Use the function name from stats file
-                ))
-                
-                # Insert CPU usage data for each CPU core
-                for cpu_id, cpu_percent in enumerate(cpu_info['usage']):
-                    cursor.execute('''
-                        INSERT INTO cpu_usage (job_key, call_id, cpu_id, cpu_percent, timestamp)
-                        VALUES (?, ?, ?, ?, ?)
-                    ''', (
-                        task.job_key,
-                        task.call_id,
-                        cpu_id,
-                        cpu_percent,
-                        timestamp
-                    ))
-                
-                # Insert CPU times data
-                cursor.execute('''
-                    INSERT OR REPLACE INTO cpu_times
-                    VALUES (?, ?, ?, ?, ?)
-                ''', (
-                    task.job_key,
-                    task.call_id,
-                    cpu_info['system'],
-                    cpu_info['user'],
-                    timestamp
-                ))
-                
-                # Also store the formatted output for reference
-                create_formatted_table = '''
-                CREATE TABLE IF NOT EXISTS formatted_output (
-                    job_key TEXT,
-                    call_id TEXT,
-                    timestamp REAL,
-                    output TEXT,
-                    PRIMARY KEY (job_key, call_id)
-                )
-                '''
-                cursor.execute(create_formatted_table)
-                
-                formatted_output = "Performance counter stats for 'system wide':\n\n"
-                formatted_output += f"          {pkg_energy_str} Joules power/energy-pkg/\n"
-                formatted_output += f"          {cores_energy_str} Joules power/energy-cores/\n"
-                
-                cursor.execute('''
-                    INSERT OR REPLACE INTO formatted_output
-                    VALUES (?, ?, ?, ?)
-                ''', (
-                    task.job_key,
-                    task.call_id,
-                    timestamp,
-                    formatted_output
-                ))
-                
-                conn.commit()
-                conn.close()
-                
-                logger.info(f"Energy data stored in SQLite database: {db_file}")
-            except Exception as e:
-                logger.error(f"Error writing energy data to SQLite database: {e}")
-                # Fallback to file-based storage if database fails
-                energy_file = os.path.join("/home/bigrobbin/Desktop/TFG/lithops/", f'energy_consumption_{task.job_key}_{task.call_id}.txt')
-                with open(energy_file, 'w') as f:
-                    f.write("Performance counter stats for 'system wide':\n\n")
-                    f.write(f"          {pkg_energy_str} Joules power/energy-pkg/\n")
-                    f.write(f"          {cores_energy_str} Joules power/energy-cores/\n")
-                logger.info(f"Energy data stored in fallback file: {energy_file}")
-
-        if jrp.is_alive():
-            # If process is still alive after jr.join(job_max_runtime), kill it
-            try:
-                jrp.terminate()
-            except Exception:
-                # thread does not have terminate method
-                pass
-            msg = ('Function exceeded maximum time of {} seconds and was '
-                   'killed'.format(task.execution_timeout))
-            raise TimeoutError('HANDLER', msg)
-
-        if not handler_conn.poll():
-            logger.error('No completion message received from JobRunner process')
-            logger.debug('Assuming memory overflow...')
-            # Only 1 message is returned by jobrunner when it finishes.
-            # If no message, this means that the jobrunner process was killed.
-            # 99% of times the jobrunner is killed due an OOM, so we assume here an OOM.
-            msg = 'Function exceeded maximum memory and was killed'
-            raise MemoryError('HANDLER', msg)
-
-        # Get function name from stats file if available
-        function_name_updated = False
-        if os.path.exists(task.stats_file):
-            logger.info(f"Reading stats file after execution: {task.stats_file}")
-            with open(task.stats_file, 'r') as fid:
-                for line in fid.readlines():
-                    try:
-                        key, value = line.strip().split(" ", 1)
-                        if key == 'function_name':
-                            function_name = value
-                            function_name_updated = True
-                            logger.info(f"Found function name in stats file after execution: {function_name}")
-                            
-                            # Update the function name in the SQLite database
-                            try:
-                                import sqlite3
-                                db_file = os.path.join("/home/bigrobbin/Desktop/TFG/lithops/", 'energy_consumption.db')
-                                conn = sqlite3.connect(db_file)
-                                cursor = conn.cursor()
-                                cursor.execute('''
-                                    UPDATE energy_consumption 
-                                    SET function_name = ?
-                                    WHERE job_key = ? AND call_id = ?
-                                ''', (function_name, task.job_key, task.call_id))
-                                conn.commit()
-                                conn.close()
-                                logger.info(f"Updated function name in SQLite database: {function_name}")
-                            except Exception as e:
-                                logger.error(f"Error updating function name in SQLite database: {e}")
-                        
-                        try:
-                            call_status.add(key, float(value))
-                        except Exception:
-                            call_status.add(key, value)
-                        if key in ['exception', 'exc_pickle_fail']:
-                            call_status.add(key, eval(value))
-                    except Exception as e:
-                        logger.error(f"Error processing stats file line after execution: {line} - {e}")
-            
-            if not function_name_updated:
-                logger.warning("Function name not found in stats file after execution")
-
-    except KeyboardInterrupt:
-        job_interruped = True
-        logger.debug("Job interrupted")
-
-    except Exception:
-        # internal runtime exceptions
-        print('----------------------- EXCEPTION !-----------------------')
-        traceback.print_exc(file=sys.stdout)
-        print('----------------------------------------------------------')
-        call_status.add('exception', True)
-
-        pickled_exc = pickle.dumps(sys.exc_info())
-        pickle.loads(pickled_exc)  # this is just to make sure they can be unpickled
-        call_status.add('exc_info', str(pickled_exc))
-
-    finally:
-        if not job_interruped:
-            call_status.add('worker_end_tstamp', time.time())
-
-            # Flush log stream and save it to the call status
-            task.log_stream.flush()
-            if os.path.isfile(task.log_file):
-                with open(task.log_file, 'rb') as lf:
-                    log_str = base64.b64encode(zlib.compress(lf.read())).decode()
-                    call_status.add('logs', log_str)
-
-            call_status.send_finish_event()
-
-        logger.info("Finished")
+                cursor

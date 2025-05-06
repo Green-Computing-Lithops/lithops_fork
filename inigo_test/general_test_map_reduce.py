@@ -22,7 +22,7 @@ from standarized_measurement_functions import sleep_function, prime_function
 
 # iterdata = [1, 2, 3, 4, 5]
 
-iterdata = [4]
+iterdata = [2]
 
 
 def my_reduce_function(results):

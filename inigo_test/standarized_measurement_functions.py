@@ -1,3 +1,8 @@
+"""
+this file is used to have the same funtions to all test 
+
+"""
+
 import time
 
 def sleep_function(x):
@@ -6,10 +11,7 @@ def sleep_function(x):
     time.sleep(x * 2)
     return x + 7
 
-
  
-
-
 def prime_function(x):
     print(f"Processing input: {x}")
     print(f"MAP FUNCTION PRIME")

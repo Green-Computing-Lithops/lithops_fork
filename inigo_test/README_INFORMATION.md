@@ -25,7 +25,9 @@ pip install -r requirements.txt // not allways necessary
 pip install setup.py
 
 ### install lithops: 
-pip install lithops
+<!-- pip install lithops -->
+
+venv/bin/python -m pip install -e . 
 
 
 # DOCKER
