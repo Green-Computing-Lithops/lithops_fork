@@ -1,0 +1,26 @@
+[
+  {
+    "execution_id": "b2edc2-0-M000_00000",
+    "function_name": "sleep_function",
+    "timestamp": 1746531119.1667647,
+    "energy_total": 252.59
+  },
+  {
+    "execution_id": "b2edc2-0-R000_00000",
+    "function_name": "my_reduce_function",
+    "timestamp": 1746531119.8056784,
+    "energy_total": 23.18
+  },
+  {
+    "execution_id": "b2edc2-1-A000_00000",
+    "function_name": "sleep_function",
+    "timestamp": 1746531124.1105542,
+    "energy_total": 76.18
+  },
+  {
+    "execution_id": "b2edc2-2-A000_00000",
+    "function_name": "prime_function",
+    "timestamp": 1746531124.7783973,
+    "energy_total": 26.66
+  }
+]

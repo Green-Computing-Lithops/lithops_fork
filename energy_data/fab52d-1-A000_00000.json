@@ -1,0 +1,161 @@
+{
+  "energy_consumption": {
+    "job_key": "fab52d-1-A000",
+    "call_id": "00000",
+    "timestamp": 1746531390.967275,
+    "energy_pkg": 50.81,
+    "energy_cores": 22.21,
+    "energy_total": 73.02000000000001,
+    "duration": 4.010949373245239,
+    "source": "perf",
+    "function_name": "sleep_function"
+  },
+  "cpu_usage": [
+    {
+      "cpu_id": 0,
+      "cpu_percent": 11.0,
+      "timestamp": 1746531390.967275
+    },
+    {
+      "cpu_id": 1,
+      "cpu_percent": 5.3,
+      "timestamp": 1746531390.967275
+    },
+    {
+      "cpu_id": 2,
+      "cpu_percent": 11.8,
+      "timestamp": 1746531390.967275
+    },
+    {
+      "cpu_id": 3,
+      "cpu_percent": 2.2,
+      "timestamp": 1746531390.967275
+    },
+    {
+      "cpu_id": 4,
+      "cpu_percent": 13.3,
+      "timestamp": 1746531390.967275
+    },
+    {
+      "cpu_id": 5,
+      "cpu_percent": 2.2,
+      "timestamp": 1746531390.967275
+    },
+    {
+      "cpu_id": 6,
+      "cpu_percent": 14.5,
+      "timestamp": 1746531390.967275
+    },
+    {
+      "cpu_id": 7,
+      "cpu_percent": 2.5,
+      "timestamp": 1746531390.967275
+    },
+    {
+      "cpu_id": 8,
+      "cpu_percent": 17.1,
+      "timestamp": 1746531390.967275
+    },
+    {
+      "cpu_id": 9,
+      "cpu_percent": 5.0,
+      "timestamp": 1746531390.967275
+    },
+    {
+      "cpu_id": 10,
+      "cpu_percent": 18.9,
+      "timestamp": 1746531390.967275
+    },
+    {
+      "cpu_id": 11,
+      "cpu_percent": 2.5,
+      "timestamp": 1746531390.967275
+    },
+    {
+      "cpu_id": 12,
+      "cpu_percent": 15.5,
+      "timestamp": 1746531390.967275
+    },
+    {
+      "cpu_id": 13,
+      "cpu_percent": 2.2,
+      "timestamp": 1746531390.967275
+    },
+    {
+      "cpu_id": 14,
+      "cpu_percent": 17.5,
+      "timestamp": 1746531390.967275
+    },
+    {
+      "cpu_id": 15,
+      "cpu_percent": 1.2,
+      "timestamp": 1746531390.967275
+    },
+    {
+      "cpu_id": 16,
+      "cpu_percent": 16.6,
+      "timestamp": 1746531390.967275
+    },
+    {
+      "cpu_id": 17,
+      "cpu_percent": 14.9,
+      "timestamp": 1746531390.967275
+    },
+    {
+      "cpu_id": 18,
+      "cpu_percent": 16.0,
+      "timestamp": 1746531390.967275
+    },
+    {
+      "cpu_id": 19,
+      "cpu_percent": 14.3,
+      "timestamp": 1746531390.967275
+    },
+    {
+      "cpu_id": 20,
+      "cpu_percent": 14.5,
+      "timestamp": 1746531390.967275
+    },
+    {
+      "cpu_id": 21,
+      "cpu_percent": 11.5,
+      "timestamp": 1746531390.967275
+    },
+    {
+      "cpu_id": 22,
+      "cpu_percent": 11.2,
+      "timestamp": 1746531390.967275
+    },
+    {
+      "cpu_id": 23,
+      "cpu_percent": 9.0,
+      "timestamp": 1746531390.967275
+    },
+    {
+      "cpu_id": 24,
+      "cpu_percent": 5.5,
+      "timestamp": 1746531390.967275
+    },
+    {
+      "cpu_id": 25,
+      "cpu_percent": 4.2,
+      "timestamp": 1746531390.967275
+    },
+    {
+      "cpu_id": 26,
+      "cpu_percent": 3.5,
+      "timestamp": 1746531390.967275
+    },
+    {
+      "cpu_id": 27,
+      "cpu_percent": 3.2,
+      "timestamp": 1746531390.967275
+    }
+  ],
+  "cpu_times": {
+    "system_time": 4385.84,
+    "user_time": 19909.22,
+    "timestamp": 1746531390.967275
+  },
+  "formatted_output": "Performance counter stats for 'system wide':\n\n          50,81 Joules power/energy-pkg/\n          22,21 Joules power/energy-cores/\n"
+}

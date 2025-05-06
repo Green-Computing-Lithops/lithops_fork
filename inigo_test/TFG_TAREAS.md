@@ -327,13 +327,9 @@ MAP FUNCTION SLEEP
        8,012292576 seconds time elapsed
 
 
-
-
-
-
-
-
-
-
-
 """
+
+
+Te falta ver pq el log se guarda aqui: 
+cat /tmp/lithops-root/logs/12acd6-0-M000.log
+ 

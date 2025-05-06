@@ -521,6 +521,9 @@ def run_task(task):
     logger.info(f"Lithops v{__version__} - Starting {backend} execution")
     logger.info(f"Execution ID: {task.job_key}/{task.call_id}")
 
+    # Ensure json is imported in this scope
+    import json
+    
     env = task.extra_env
     env['LITHOPS_CONFIG'] = json.dumps(task.config)
     env['__LITHOPS_SESSION_ID'] = '-'.join([task.job_key, task.call_id])
@@ -662,134 +665,109 @@ def run_task(task):
             print(f"          {cores_energy_str} Joules power/energy-cores/")
             print()
             
-            # Store energy consumption data in SQLite database
-            import sqlite3
+            # Store energy consumption data in JSON format
+            import json
             
-            db_file = os.path.join("/home/bigrobbin/Desktop/TFG/lithops_fork/", 'energy_consumption.db')
+            # Base directory for JSON files - use current working directory or fallback to /tmp
+            try:
+                # Get the current working directory
+                cwd = os.getcwd()
+                json_dir = os.path.join(cwd, 'energy_data')
+                # Create directory with proper permissions
+                os.makedirs(json_dir, exist_ok=True)
+                # Ensure the directory has the right permissions
+                os.chmod(json_dir, 0o777)  # rwx for all users
+                logger.info(f"Created energy data directory: {json_dir}")
+            except Exception as e:
+                logger.error(f"Error creating energy data directory: {e}")
+                # Fallback to /tmp directory which should be writable
+                json_dir = os.path.join("/tmp", 'lithops_energy_data')
+                os.makedirs(json_dir, exist_ok=True)
+                logger.info(f"Using fallback energy data directory: {json_dir}")
+            
             timestamp = time.time()
             
             try:
-                conn = sqlite3.connect(db_file)
-                cursor = conn.cursor()
+                # Create a unique ID for this execution
+                execution_id = f"{task.job_key}_{task.call_id}"
                 
-                # Create energy consumption table
-                create_energy_table = '''
-                CREATE TABLE IF NOT EXISTS energy_consumption (
-                    job_key TEXT,
-                    call_id TEXT,
-                    timestamp REAL,
-                    energy_pkg REAL,
-                    energy_cores REAL,
-                    duration REAL,
-                    source TEXT,
-                    function_name TEXT,
-                    PRIMARY KEY (job_key, call_id)
-                )
-                '''
-                cursor.execute(create_energy_table)
+                # Main energy consumption data
+                energy_consumption = {
+                    'job_key': task.job_key,
+                    'call_id': task.call_id,
+                    'timestamp': timestamp,
+                    'energy_pkg': pkg_energy,
+                    'energy_cores': cores_energy,
+                    'energy_total': energy_data['energy'].get('total', 0),
+                    'duration': energy_data['duration'],
+                    'source': energy_data.get('source', 'unknown'),
+                    'function_name': function_name
+                }
                 
-                # Create CPU usage table to store per-CPU data
-                create_cpu_table = '''
-                CREATE TABLE IF NOT EXISTS cpu_usage (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    job_key TEXT,
-                    call_id TEXT,
-                    cpu_id INTEGER,
-                    cpu_percent REAL,
-                    timestamp REAL,
-                    FOREIGN KEY (job_key, call_id) REFERENCES energy_consumption(job_key, call_id)
-                )
-                '''
-                cursor.execute(create_cpu_table)
-                
-                # Create CPU times table
-                create_cpu_times_table = '''
-                CREATE TABLE IF NOT EXISTS cpu_times (
-                    job_key TEXT,
-                    call_id TEXT,
-                    system_time REAL,
-                    user_time REAL,
-                    timestamp REAL,
-                    PRIMARY KEY (job_key, call_id),
-                    FOREIGN KEY (job_key, call_id) REFERENCES energy_consumption(job_key, call_id)
-                )
-                '''
-                cursor.execute(create_cpu_times_table)
-                
-                # Insert energy consumption data
-                cursor.execute('''
-                    INSERT OR REPLACE INTO energy_consumption 
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                ''', (
-                    task.job_key,
-                    task.call_id,
-                    timestamp,
-                    pkg_energy,
-                    cores_energy,
-                    energy_data['duration'],
-                    energy_data.get('source', 'unknown'),
-                    function_name  # Use the function name from stats file
-                ))
-                
-                # Insert CPU usage data for each CPU core
+                # CPU usage data
+                cpu_usage = []
                 for cpu_id, cpu_percent in enumerate(cpu_info['usage']):
-                    cursor.execute('''
-                        INSERT INTO cpu_usage (job_key, call_id, cpu_id, cpu_percent, timestamp)
-                        VALUES (?, ?, ?, ?, ?)
-                    ''', (
-                        task.job_key,
-                        task.call_id,
-                        cpu_id,
-                        cpu_percent,
-                        timestamp
-                    ))
+                    cpu_usage.append({
+                        'cpu_id': cpu_id,
+                        'cpu_percent': cpu_percent,
+                        'timestamp': timestamp
+                    })
                 
-                # Insert CPU times data
-                cursor.execute('''
-                    INSERT OR REPLACE INTO cpu_times
-                    VALUES (?, ?, ?, ?, ?)
-                ''', (
-                    task.job_key,
-                    task.call_id,
-                    cpu_info['system'],
-                    cpu_info['user'],
-                    timestamp
-                ))
+                # CPU times data
+                cpu_times = {
+                    'system_time': cpu_info['system'],
+                    'user_time': cpu_info['user'],
+                    'timestamp': timestamp
+                }
                 
-                # Also store the formatted output for reference
-                create_formatted_table = '''
-                CREATE TABLE IF NOT EXISTS formatted_output (
-                    job_key TEXT,
-                    call_id TEXT,
-                    timestamp REAL,
-                    output TEXT,
-                    PRIMARY KEY (job_key, call_id)
-                )
-                '''
-                cursor.execute(create_formatted_table)
-                
+                # Formatted output
                 formatted_output = "Performance counter stats for 'system wide':\n\n"
                 formatted_output += f"          {pkg_energy_str} Joules power/energy-pkg/\n"
                 formatted_output += f"          {cores_energy_str} Joules power/energy-cores/\n"
                 
-                cursor.execute('''
-                    INSERT OR REPLACE INTO formatted_output
-                    VALUES (?, ?, ?, ?)
-                ''', (
-                    task.job_key,
-                    task.call_id,
-                    timestamp,
-                    formatted_output
-                ))
+                # Combine all data into one object
+                all_data = {
+                    'energy_consumption': energy_consumption,
+                    'cpu_usage': cpu_usage,
+                    'cpu_times': cpu_times,
+                    'formatted_output': formatted_output
+                }
                 
-                conn.commit()
-                conn.close()
+                # Write to a single JSON file
+                json_file = os.path.join(json_dir, f"{execution_id}.json")
+                with open(json_file, 'w') as f:
+                    json.dump(all_data, f, indent=2)
                 
-                logger.info(f"Energy data stored in SQLite database: {db_file}")
+                logger.info(f"Energy data stored in JSON file: {json_file}")
+                
+                # Also write a summary file that contains all execution IDs
+                summary_file = os.path.join(json_dir, 'summary.json')
+                summary = []
+                
+                if os.path.exists(summary_file):
+                    try:
+                        with open(summary_file, 'r') as f:
+                            summary = json.load(f)
+                    except Exception as e:
+                        logger.error(f"Error reading summary file: {e}")
+                        summary = []
+                
+                summary.append({
+                    'execution_id': execution_id,
+                    'function_name': function_name,
+                    'timestamp': timestamp,
+                    'energy_total': energy_data['energy'].get('total', 0)
+                })
+                
+                with open(summary_file, 'w') as f:
+                    json.dump(summary, f, indent=2)
+                
             except Exception as e:
-                logger.error(f"Error writing energy data to SQLite database: {e}")
-                # Fallback to file-based storage if database fails
-                energy_file = os.path.join("/home/bigrobbin/Desktop/TFG/lithops_fork/", f'energy_consumption_{task.job_key}_{task.call_id}.txt')
+                logger.error(f"Error writing energy data to JSON file: {e}")
+                # Fallback to simple text file in /tmp directory if JSON fails
+                energy_file = os.path.join("/tmp", f'lithops_energy_consumption_{task.job_key}_{task.call_id}.txt')
+                # Ensure the directory exists
+                os.makedirs(os.path.dirname(energy_file), exist_ok=True)
                 with open(energy_file, 'w') as f:
                     f.write("Performance counter stats for 'system wide':\n\n")
                     f.write(f"          {pkg_energy_str} Joules power/energy-pkg/\n")
@@ -829,22 +807,44 @@ def run_task(task):
                             function_name_updated = True
                             logger.info(f"Found function name in stats file after execution: {function_name}")
                             
-                            # Update the function name in the SQLite database
+                            # Update the function name in the JSON file
                             try:
-                                import sqlite3
-                                db_file = os.path.join("/home/bigrobbin/Desktop/TFG/lithops_fork/", 'energy_consumption.db')
-                                conn = sqlite3.connect(db_file)
-                                cursor = conn.cursor()
-                                cursor.execute('''
-                                    UPDATE energy_consumption 
-                                    SET function_name = ?
-                                    WHERE job_key = ? AND call_id = ?
-                                ''', (function_name, task.job_key, task.call_id))
-                                conn.commit()
-                                conn.close()
-                                logger.info(f"Updated function name in SQLite database: {function_name}")
+                                import json
+                                # Get the current working directory
+                                cwd = os.getcwd()
+                                json_dir = os.path.join(cwd, 'energy_data')
+                                json_file = os.path.join(json_dir, f"{task.job_key}_{task.call_id}.json")
+                                
+                                if os.path.exists(json_file):
+                                    with open(json_file, 'r') as f:
+                                        data = json.load(f)
+                                    
+                                    # Update function name
+                                    if 'energy_consumption' in data:
+                                        data['energy_consumption']['function_name'] = function_name
+                                    
+                                    # Write updated data back to file
+                                    with open(json_file, 'w') as f:
+                                        json.dump(data, f, indent=2)
+                                    
+                                    logger.info(f"Updated function name in JSON file: {function_name}")
+                                    
+                                    # Also update the summary file
+                                    summary_file = os.path.join(json_dir, 'summary.json')
+                                    if os.path.exists(summary_file):
+                                        with open(summary_file, 'r') as f:
+                                            summary = json.load(f)
+                                        
+                                        for entry in summary:
+                                            if entry.get('execution_id') == f"{task.job_key}_{task.call_id}":
+                                                entry['function_name'] = function_name
+                                        
+                                        with open(summary_file, 'w') as f:
+                                            json.dump(summary, f, indent=2)
+                                else:
+                                    logger.warning(f"JSON file not found for updating function name: {json_file}")
                             except Exception as e:
-                                logger.error(f"Error updating function name in SQLite database: {e}")
+                                logger.error(f"Error updating function name in JSON file: {e}")
                         
                         try:
                             call_status.add(key, float(value))
