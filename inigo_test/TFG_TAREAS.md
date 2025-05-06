@@ -1,3 +1,12 @@
+
+
+
+
+
+
+
+
+
 # DISTRIBUCION DE LAS TAREAS TFG: 
 
 ## SEMANA 1 (07/02/2025): Viaje a tarragona
@@ -184,3 +193,147 @@ estas cargando con trabajo de manri y german --> no les hagas perder el tiempo
 
  
  change the flexecutor-main/flexecutor/workflow/executor.py  --> profile funtion to storage the energy consumption and include in the json output keeping the format of 
+
+
+
+ # Extensions : 
+ Augment
+ 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+"""
+general in 
+Simple Lithops example using the map_reduce method.
+
+In this example the map_reduce() method will launch one
+map function for each entry in 'iterdata', and then it will
+wait locally for the reduce result.
+
+RUN WITH SUDO:
+
+sudo env "PATH=$PATH" "PYTHONPATH=$PYTHONPATH" /home/bigrobbin/Desktop/TFG/venv/bin/python3 inigo_test/general_test_map_reduce.py
+
+
+previous
+cd inigo_test/
+
+"""
+
+
+codigo general 
+
+"""
+Basics results :
+initial results: 
+
+SLEEP function metrics:
+CPU User Time: 12162.92
+CPU Usage Average: 2.414285714285714
+Energy Consumption: 29364.764
+
+
+
+COSTLY function metrics:
+CPU User Time: 12163.19
+CPU Usage Average: 6.464285714285714 // suma en vez de caluclo 1600% --> 
+Energy Consumption: 78626.33535714286
+
+ 
+
+
+
+
+
+
+
+POWERAPI EXTRA: 
+https://blog.theodo.com/2020/09/power-api-deep-dive/
+https://www.sciencedirect.com/science/article/pii/S1389128624002032
+
+
+
+
+
+AUX COMMANDS: 
+sqlite3 /home/bigrobbin/Desktop/TFG/lithops/energy_consumption.db "SELECT * FROM energy_consumption"
+sqlite3 /home/bigrobbin/Desktop/TFG/lithops/energy_consumption.db "SELECT AVG(energy_pkg) FROM energy_consumption"
+sqlite3 /home/bigrobbin/Desktop/TFG/lithops/energy_consumption.db "drop table energy_consumption"
+
+
+
+
+-- Get energy consumption by function name
+SELECT function_name, AVG(energy_pkg) as avg_energy
+FROM energy_consumption
+GROUP BY function_name
+ORDER BY avg_energy DESC;
+
+-- Get CPU usage patterns for specific functions
+SELECT e.function_name, c.cpu_id, AVG(c.cpu_percent) as avg_cpu
+FROM energy_consumption e
+JOIN cpu_usage c ON e.job_key = c.job_key AND e.call_id = c.call_id
+GROUP BY e.function_name, c.cpu_id
+ORDER BY e.function_name, c.cpu_id;
+
+
+
+
+
+sqlite3 /home/bigrobbin/Desktop/TFG/lithops/energy_consumption.db <<EOF
+.headers on
+.mode column
+SELECT * FROM energy_consumption;
+EOF
+
+
+
+
+MAP FUNCTION PRIME
+MAX PRIME 6249989 
+
+ Performance counter stats for 'system wide':
+
+          1.373,00 Joules power/energy-pkg/                                                     
+          1.265,14 Joules power/energy-cores/                                                   
+
+      16,553457859 seconds time elapsed
+
+(venv) bigrobbin@bigrobbin:~/Desktop/TFG/lithops$ cd /home/bigrobbin/Desktop/TFG/lithops && sudo perf stat -e power/energy-pkg/,power/energy-cores/ -a python3 -c "import time; import sys; sys.path.append('/home/bigrobbin/Desktop/TFG/lithops/inigo_test'); from standarized_measurement_functions import sleep_function; sleep_function(4)"
+Processing input: 4
+MAP FUNCTION SLEEP
+
+ Performance counter stats for 'system wide':
+
+             83,87 Joules power/energy-pkg/                                                     
+             30,29 Joules power/energy-cores/                                                   
+
+       8,012292576 seconds time elapsed
+
+
+
+
+
+
+
+
+
+
+
+"""
