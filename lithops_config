@@ -1,6 +1,7 @@
-lithops: 
+lithops:
     backend: localhost
-    storage: localhost  
+    storage: localhost
+ 
     #data_cleaner: <True/False>
     #monitoring: storage
     #monitoring_interval: 2
@@ -14,11 +15,14 @@ lithops:
     #log_filename <path_to_a_file>
 
 localhost:
+ 
+    # runtime: ml-runtime
     runtime: docker.io/lithopscloud/ibmcf-python-v312
+
     # https://github.com/lithops-cloud/lithops/blob/master/docs/source/compute_config/localhost.md 
-    
-    worker_processes: CPU_COUNT
-    version: 2
+    # https://lithops-cloud.github.io/docs/source/cli.html#lithops-runtime-build-runtime-name
+    # worker_processes: 4 # CPU_COUNT
+    # version: 2
 
 #ibm:
     #iam_api_key: <IAM KEY>
@@ -111,12 +115,12 @@ localhost:
     #docker_user: <registry username>
     #docker_password: <registry password>
 
-vm:
+# vm:
     #ip_address: <IP_ADDRESS>
     #ssh_user: <SSH_USERNAME>
     #ssh_password: <SSH_PASSWORD>
     #ssh_key_filename : <PATH_TO_SSH_KEYFILE_FOR_MASTER_VM> # Default path in OS
-    runtime: lithopscloud/ibmcf-python-v312
+    # runtime: lithopscloud/ibmcf-python-v312
     #worker_processes: <WORKER_GRANULARITY> Default is 1
 
 #knative:
@@ -170,11 +174,11 @@ vm:
     #access_key: <ACCESS_KEY>
     #secret_key: <ACCESS_KEY>
     
-#minio:
-    #storage_bucket: <BUCKET_NAME>
-    #endpoint: <ENDPOINT_URL>
-    #access_key: <ACCESS_KEY>
-    #secret_key: <ACCESS_KEY>
+# minio:
+#     storage_bucket: lithops-test
+#     endpoint: http://localhost:9000
+#     access_key_id: minioadmin
+#     secret_access_key: minioadmin
     
 #redis:
     #host: <ENDPOINT_URL>

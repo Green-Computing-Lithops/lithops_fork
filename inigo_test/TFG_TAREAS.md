@@ -1,13 +1,9 @@
 
-
-
-
-
-
-
-
+# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 # DISTRIBUCION DE LAS TAREAS TFG: 
+* discord: https://discord.gg/y5Qe5dHt
+
 
 ## SEMANA 1 (07/02/2025): Viaje a tarragona
 1. Instalar lithops y entender el funcionamiento
@@ -178,158 +174,288 @@ preguntar jolteon :
 mas facil introducirse si esta poco explotado 
 estas cargando con trabajo de manri y german --> no les hagas perder el tiempo 
 
+# 
+german: muy importante ejecutar y recopilar no el que 
+# plotmap
+
+manri sufi 
+varios nodos de distribucion y han cargado los nodos --> experimentos y no funcionan 
+# Tareas pendientes
+grafo funcionalidad --> diagrama de flujo --> chatgpt / draw.io
 
 
 
+# Manri 07/03/2023: 
+valores base y heuristica --> estimacion de energia --> links german 
+TDP= procesador 65w
+porcentaje de uso de cada aplicacion --> primer aproach 
+
+version naive : consultar basicamente 
+
+scrapping a una api -> consumo energia base 
+hardcoding --> cambiar por necesario 
 
 
+# STEPS to follow: 
+1. Obtener la energia
+    - version basica con tdp --> funcionando 
+    - perf: te falta como guardar la informacion 
+    - PowerApi: intentamos hasta las 9 --> sino pedimos ayuda
+    - Ver como funciona Powerapi y ver alternativas
+
+2. Predictor de carga 
 
 
- # prompt : 
- im creating a library using minion as a base, the library is in the path flexecutor-main, inside it i have 
+# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
- al ejecutar el profile tenemos un output de la energia 
+# Debbugger
+## solved: 
+ .vscode/launch.json
+
+ {
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Python no justMyCode",
+      "type": "debugpy",
+      "request": "launch",
+      "purpose": ["debug-test"],
+      "program": "${file}",
+      "console": "integratedTerminal",
+      "justMyCode": false
+    }
+  ]
+}
+
+ctrl + , --> justMyCode --> unselect all 
+
+
+# run your own model without 
+/home/bigrobbin/Desktop/git/lithops_fork/venv/bin/python flexecutor-main/examples/energy_comparison.py
+
+# elementos de la reunion 
+comando minio --> contenedor docker object storage != file storage --> almacenamiento object storage 
+minio --> subir informacion ahi ( importante para replicar en el futuro --> object storage / no lithops storage --> S3 )
+lithops --> bucket localhost / almacenamiento minio --> credenciales docker --> Map a storage ahi 
 
 
  
- change the flexecutor-main/flexecutor/workflow/executor.py  --> profile funtion to storage the energy consumption and include in the json output keeping the format of 
+
+# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+
+# minio
+docker run -d --name minio-server -p 9000:9000 -p 9001:9001 -v /home/bigrobbin/Desktop/git/lithops_fork/test-bucket:/data/test-bucket -e "MINIO_ROOT_USER=minioadmin" -e "MINIO_ROOT_PASSWORD=minioadmin" quay.io/minio/minio server /data --console-address ":9001"
+
+
+sudo docker run -d --name minio-server -p 9000:9000 -p 9001:9001 -v /home/bigrobbin/Desktop/git/lithops_fork/test-bucket:/data/test-bucket -e "MINIO_ROOT_USER=minioadmin" -e "MINIO_ROOT_PASSWORD=minioadmin" quay.io/minio/minio server /data --console-address ":9001"
+
+sudo docker run -d -p 9000:9000 -p 9001:9001 --name minio quay.io/minio/minio server /data --console-address ":9001"
+
+
+sudo docker run -d --name minio-server -p 9000:9000 -p 9001:9001 -e "MINIO_ROOT_USER=minioadmin" -e "MINIO_ROOT_PASSWORD=minioadmin" quay.io/minio/minio server /data --console-address ":9001"
+
+# servidor web --> 9001 / api rest 9000 : forwarding de dos puertos --> puerto sw vs api rest  
+
+curl -O https://dl.min.io/client/mc/release/linux-amd64/mc
+
+(venv) bigrobbin@bigrobbin:~/Desktop/git/lithops_fork$ chmod +x mc
+(venv) bigrobbin@bigrobbin:~/Desktop/git/lithops_fork$ ./mc alias set myminio http://localhost:9000 minioadmin minioadmin
+mc: Configuration written to `/home/bigrobbin/.mc/config.json`. Please update your access credentials.
+mc: Successfully created `/home/bigrobbin/.mc/share`.
+mc: Initialized share uploads `/home/bigrobbin/.mc/share/uploads.json` file.
+mc: Initialized share downloads `/home/bigrobbin/.mc/share/downloads.json` file.
+Added `myminio` successfully.
+(venv) bigrobbin@bigrobbin:~/Desktop/git/lithops_fork$ ./mc mb myminio/test-bucket
+
+ 
+# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+
+# paralelismo
+
+Now I understand how the profiling data is stored. The get_my_exec_path() function returns the path where the flexorchestrator script is located, which is set by the @flexorchestrator() decorator. This path is used as the base path for storing the profiling data.
+
+In the main.py file, the @flexorchestrator(bucket="test-bucket") decorator is used, which sets the base path to the directory where main.py is located, which is flexecutor-main/examples/video.
+
+So the profiling data should be stored in:
+flexecutor-main/examples/video/profiling/video/stage0.json
+flexecutor-main/examples/video/profiling/video/stage1.json
+flexecutor-main/examples/video/profiling/video/stage2.json
+flexecutor-main/examples/video/profiling/video/stage3.json
 
 
 
- # Extensions : 
- Augment
+# elements to solve the error 
+        //     "(cpu 1, mem, worker 2)": { 
+        //     "(cpu 4, mem, worker 4)": {
+        //     "(cpu 8, mem, worker 8)": {
+        //     "(cpu 8, mem, worker 16)": { --> principalmete workers
+
+
+
+# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+# Structure of the project 
+
+1. **Lithops** – my serverless compute framework.  
+2. **MinIO** – S3-compatible object storage used as the communication bus between functions.  
+3. **Flexecutor** – a Python wrapper around Lithops that aggregates execution metadata (logs, perf stats, outputs) into a single report.
+
+ 
+
+
  
 
 
 
 
 
+# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+# LITHOPS 
+# install lithops backend: 
+
+docker pull lithopscloud/ibmcf-python-v312
+
+
+net stop LxssManager
+net start LxssManager
+wsl --update
+
+## Entorno virtual
+
+### configuracion entorno virtual
+python -m venv venv
+python3 -m venv venv
+
+
+venv\Scripts\activate // for mac
+venv\Scripts\Activate.ps1 // for windows
+source venv/bin/activate 
+source .venv/bin/activate 
+source lithops-venv/bin/activate 
+
+
+### to finish the sesion: 
+deactivate
+
+### comprobacion elementos de entorno virtual
+python --version
+pip list
+pip install -r requirements.txt // not allways necessary
+pip install setup.py
+
+### install lithops: 
+<!-- pip install lithops -->
+
+### Install the Package in Editable Mode
+venv/bin/python -m pip install -e . 
+pip install -e .
+
+### una vez instalado el v env 
+pip install -e ".[all]" --break-system-packages
+pip install -e ".[all]" 
+
+
+# lithops yaml
+https://github.com/lithops-cloud/lithops/blob/master/config/config_template.yaml
+
+# where configuration lithops is : 
+export LITHOPS_CONFIG_FILE=/home/bigrobbin/Desktop/TFG/lithops_fork/lithops_config   #/path/to/your/config
+
+# LITHOPS_CONFIG_FILE system environment variable:
+export LITHOPS_CONFIG_FILE='/home/bigrobbin/Desktop/TFG/lithops_fork/lithops_config'
+unset LITHOPS_CONFIG_FILE
+
+echo $LITHOPS_CONFIG_FILE
+ls ~/.lithops/config ./.lithops_config /etc/lithops/config
+
+
+nano ~/.lithops/config
+
+# command:  
+python -c "import lithops; print(lithops.__file__)"
+
+
+# inside the venv 
+pip install --force-reinstall lithops
 
 
 
+# see where lithops is 
+C:\Users\Usuario\Desktop\lithops\lithops\__init__.py
+pip uninstall lithops -y
+rmdir /s /q C:\Users\Usuario\Desktop\lithops\lithops
+
+# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 
+# DOCKER
+## Install wsl
+https://docs.microsoft.com/es-es/windows/wsl/install-win10
+
+## install docker
+https://docs.docker.com/docker-for-windows/install/
+
+* verify docker is installed
+* verify the path to docker is in the environment variables
 
 
-
-
-
-
-
-
-
-"""
-general in 
-Simple Lithops example using the map_reduce method.
-
-In this example the map_reduce() method will launch one
-map function for each entry in 'iterdata', and then it will
-wait locally for the reduce result.
-
-RUN WITH SUDO:
-
-sudo env "PATH=$PATH" "PYTHONPATH=$PYTHONPATH" /home/bigrobbin/Desktop/TFG/venv/bin/python3 inigo_test/general_test_map_reduce.py
-
-
-previous
-cd inigo_test/
-
-"""
-
-
-codigo general 
-
-"""
-Basics results :
-initial results: 
-
-SLEEP function metrics:
-CPU User Time: 12162.92
-CPU Usage Average: 2.414285714285714
-Energy Consumption: 29364.764
-
-
-
-COSTLY function metrics:
-CPU User Time: 12163.19
-CPU Usage Average: 6.464285714285714 // suma en vez de caluclo 1600% --> 
-Energy Consumption: 78626.33535714286
+## instalar docker imagen de lithops
+docker pull lithopscloud/ibmcf-python-v312
+docker images
+docker run -it lithopscloud/ibmcf-python-v312 python --version
 
  
 
 
+# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 
+# Problemas: 
+## no module pika installed as well as all requierements and libraries
+* only when i intall lithops in local and execute the examples in the virtual machine it works 
+* seems that the file should be installed in the venv python but also in the system
+* in the folder: C:\Users\Usuario\AppData\Local\Temp\lithops-root there where errors bc the both enviroments are using the same folder 
 
 
-
-POWERAPI EXTRA: 
-https://blog.theodo.com/2020/09/power-api-deep-dive/
-https://www.sciencedirect.com/science/article/pii/S1389128624002032
-
-
-
-
-
-AUX COMMANDS: 
-sqlite3 /home/bigrobbin/Desktop/TFG/lithops/energy_consumption.db "SELECT * FROM energy_consumption"
-sqlite3 /home/bigrobbin/Desktop/TFG/lithops/energy_consumption.db "SELECT AVG(energy_pkg) FROM energy_consumption"
-sqlite3 /home/bigrobbin/Desktop/TFG/lithops/energy_consumption.db "drop table energy_consumption"
-
-
-
-
--- Get energy consumption by function name
-SELECT function_name, AVG(energy_pkg) as avg_energy
-FROM energy_consumption
-GROUP BY function_name
-ORDER BY avg_energy DESC;
-
--- Get CPU usage patterns for specific functions
-SELECT e.function_name, c.cpu_id, AVG(c.cpu_percent) as avg_cpu
-FROM energy_consumption e
-JOIN cpu_usage c ON e.job_key = c.job_key AND e.call_id = c.call_id
-GROUP BY e.function_name, c.cpu_id
-ORDER BY e.function_name, c.cpu_id;
-
-
-
-
-
-sqlite3 /home/bigrobbin/Desktop/TFG/lithops/energy_consumption.db <<EOF
-.headers on
-.mode column
-SELECT * FROM energy_consumption;
-EOF
-
-
-
-
-MAP FUNCTION PRIME
-MAX PRIME 6249989 
-
- Performance counter stats for 'system wide':
-
-          1.373,00 Joules power/energy-pkg/                                                     
-          1.265,14 Joules power/energy-cores/                                                   
-
-      16,553457859 seconds time elapsed
-
-(venv) bigrobbin@bigrobbin:~/Desktop/TFG/lithops$ cd /home/bigrobbin/Desktop/TFG/lithops && sudo perf stat -e power/energy-pkg/,power/energy-cores/ -a python3 -c "import time; import sys; sys.path.append('/home/bigrobbin/Desktop/TFG/lithops/inigo_test'); from standarized_measurement_functions import sleep_function; sleep_function(4)"
-Processing input: 4
-MAP FUNCTION SLEEP
-
- Performance counter stats for 'system wide':
-
-             83,87 Joules power/energy-pkg/                                                     
-             30,29 Joules power/energy-cores/                                                   
-
-       8,012292576 seconds time elapsed
-
-
-"""
-
-
-Te falta ver pq el log se guarda aqui: 
-cat /tmp/lithops-root/logs/12acd6-0-M000.log
+```bash
+$env:LITHOPS_DEBUG = "True"
+lithops hello
+```
  
+
+## to run the examples:
+
+* have complete and funtional commits in your local git repository
+* create a new branch
+* push the branch to the remote repository
+* create a new cloud function
+* push the cloud function to the remote repository
+* create a new job
+* push the job to the remote repository
+* run the job
+* validate before update 
+
+
+# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+# elements to execution enviroments 
+lithops logs poll
+
+# test in local: 
+https://github.com/lithops-cloud/lithops/blob/master/docs/source/compute_config/localhost.md 
+lithops hello -b localhost -s localhost
+
+# see the logs : 
+lithops logs poll
+
+
+
+# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+ 
+
+ 
+
+
+# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

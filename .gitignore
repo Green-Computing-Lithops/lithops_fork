@@ -16,6 +16,7 @@ lithops_*.zip
 .venv
 env/
 venv/
+lithops-venv
 
 # Linux
 *~

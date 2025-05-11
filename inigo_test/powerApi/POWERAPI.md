@@ -157,4 +157,8 @@ ls /sys/class/powercap/intel-rapl
 ```
 
 
+POWERAPI EXTRA: 
+https://blog.theodo.com/2020/09/power-api-deep-dive/
+https://www.sciencedirect.com/science/article/pii/S1389128624002032
+
 
