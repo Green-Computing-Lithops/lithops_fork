@@ -18,6 +18,11 @@ env/
 venv/
 lithops-venv
 
+
+
+# energy folders: 
+energy_data/
+
 # Linux
 *~
 
