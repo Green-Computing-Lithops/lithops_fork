@@ -40,6 +40,7 @@ class EnergyMonitor:
         self.energy_value = None
         self.cpu_percent = None
         self.perf_output_file = f"/tmp/perf_energy_{process_id}.txt"
+        self.function_name = None
         
         # Print directly to terminal for debugging
         print(f"\n==== ENERGY MONITOR INITIALIZED FOR PROCESS {process_id} ====")
@@ -355,13 +356,17 @@ class EnergyMonitor:
             print("No energy-cores data from perf, setting to 0")
             result['energy']['cores'] = 0
             
-        # Calculate total energy (sum of pkg and cores)
-        total_energy = result['energy']['pkg'] + result['energy'].get('cores', 0)
-        print(f"Total energy: {total_energy:.2f} Joules")
-        result['energy']['total'] = total_energy
+        # Calculate core percentage (energy_cores / energy_pkg)
+        if result['energy']['pkg'] > 0:
+            core_percentage = result['energy']['cores'] / result['energy']['pkg']
+            print(f"Core percentage: {core_percentage:.4f} ({core_percentage * 100:.2f}%)")
+            result['energy']['core_percentage'] = core_percentage
+        else:
+            print("Cannot calculate core percentage, energy_pkg is 0")
+            result['energy']['core_percentage'] = 0
         
         # If we have no energy data at all, set source to 'none'
-        if total_energy == 0:
+        if result['energy']['pkg'] == 0 and result['energy']['cores'] == 0:
             result['source'] = 'none'
 
         print(f"Final energy data: {result}")
@@ -374,9 +379,14 @@ class EnergyMonitor:
         
         logger = logging.getLogger(__name__)
         
+        # Store function name if provided
+        if function_name:
+            self.function_name = function_name
+        
         # Log energy consumption
-        logger.info(f"Energy consumption: {energy_data['energy'].get('total', 'N/A')} Joules")
-        logger.info(f"Energy efficiency: {energy_data['energy'].get('total', 0) / max(energy_data['duration'], 0.001):.2f} Watts")
+        logger.info(f"Energy consumption: {energy_data['energy'].get('pkg', 'N/A')} Joules (pkg), {energy_data['energy'].get('cores', 'N/A')} Joules (cores)")
+        logger.info(f"Core percentage: {energy_data['energy'].get('core_percentage', 0) * 100:.2f}%")
+        logger.info(f"Energy efficiency: {energy_data['energy'].get('pkg', 0) / max(energy_data['duration'], 0.001):.2f} Watts")
         
         # Print energy data in the format requested by the user
         print("\nPerformance counter stats for 'system wide':")
@@ -390,7 +400,6 @@ class EnergyMonitor:
             estimated_energy = energy_data['cpu_percent'] * energy_data['duration'] * 65.0  # 65W TDP
             pkg_energy = estimated_energy
             energy_data['energy']['pkg'] = pkg_energy
-            energy_data['energy']['total'] = pkg_energy
             energy_data['source'] = 'cpu_estimate'
             print(f"Using CPU-based energy estimate: {pkg_energy:.2f} Joules")
         
@@ -401,12 +410,16 @@ class EnergyMonitor:
         cores_energy = energy_data['energy'].get('cores', pkg_energy * 0.9)
         cores_energy_str = f"{cores_energy:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
         print(f"          {cores_energy_str} Joules power/energy-cores/")
+        
+        # Print core percentage
+        core_percentage = energy_data['energy'].get('core_percentage', 0)
+        print(f"          {core_percentage * 100:.2f}% core percentage (cores/pkg)")
         print()
         
         # Store energy consumption data in JSON format
-        self._store_energy_data_json(energy_data, task, cpu_info, pkg_energy, cores_energy, pkg_energy_str, cores_energy_str, function_name)
+        self._store_energy_data_json(energy_data, task, cpu_info, pkg_energy, cores_energy, core_percentage, self.function_name)
         
-    def _store_energy_data_json(self, energy_data, task, cpu_info, pkg_energy, cores_energy, pkg_energy_str, cores_energy_str, function_name=None):
+    def _store_energy_data_json(self, energy_data, task, cpu_info, pkg_energy, cores_energy, core_percentage, function_name=None):
         """Store energy data in JSON format."""
         import json
         import logging
@@ -444,7 +457,7 @@ class EnergyMonitor:
                 'timestamp': timestamp,
                 'energy_pkg': pkg_energy,
                 'energy_cores': cores_energy,
-                'energy_total': energy_data['energy'].get('total', 0),
+                'core_percentage': core_percentage,
                 'duration': energy_data['duration'],
                 'source': energy_data.get('source', 'unknown'),
                 'function_name': function_name
@@ -452,31 +465,31 @@ class EnergyMonitor:
             
             # CPU usage data
             cpu_usage = []
+            
+            # Get start timestamp and end timestamps from cpu_info if available
+            start_timestamp = cpu_info.get('start_timestamp', timestamp)
+            end_timestamps = cpu_info.get('end_timestamps', [])
+            
+            # If end_timestamps is not available or empty, use the current timestamp for all cores
+            if not end_timestamps:
+                end_timestamps = [timestamp] * len(cpu_info['usage'])
+            
+            # Create CPU usage entries with both start and end timestamps
             for cpu_id, cpu_percent in enumerate(cpu_info['usage']):
+                # Get the end timestamp for this CPU core
+                end_timestamp = end_timestamps[cpu_id] if cpu_id < len(end_timestamps) else timestamp
+                
                 cpu_usage.append({
                     'cpu_id': cpu_id,
                     'cpu_percent': cpu_percent,
-                    'timestamp': timestamp
+                    'start_timestamp': start_timestamp,
+                    'end_timestamp': end_timestamp
                 })
             
-            # CPU times data
-            cpu_times = {
-                'system_time': cpu_info['system'],
-                'user_time': cpu_info['user'],
-                'timestamp': timestamp
-            }
-            
-            # Formatted output
-            formatted_output = "Performance counter stats for 'system wide':\n\n"
-            formatted_output += f"          {pkg_energy_str} Joules power/energy-pkg/\n"
-            formatted_output += f"          {cores_energy_str} Joules power/energy-cores/\n"
-            
-            # Combine all data into one object
+            # Combine all data into one object (without cpu_times and formatted_output)
             all_data = {
                 'energy_consumption': energy_consumption,
-                'cpu_usage': cpu_usage,
-                'cpu_times': cpu_times,
-                'formatted_output': formatted_output
+                'cpu_usage': cpu_usage
             }
             
             # Write to a single JSON file
@@ -502,7 +515,9 @@ class EnergyMonitor:
                 'execution_id': execution_id,
                 'function_name': function_name,
                 'timestamp': timestamp,
-                'energy_total': energy_data['energy'].get('total', 0)
+                'energy_pkg': pkg_energy,
+                'energy_cores': cores_energy,
+                'core_percentage': core_percentage
             })
             
             with open(summary_file, 'w') as f:
@@ -516,8 +531,9 @@ class EnergyMonitor:
             os.makedirs(os.path.dirname(energy_file), exist_ok=True)
             with open(energy_file, 'w') as f:
                 f.write("Performance counter stats for 'system wide':\n\n")
-                f.write(f"          {pkg_energy_str} Joules power/energy-pkg/\n")
-                f.write(f"          {cores_energy_str} Joules power/energy-cores/\n")
+                f.write(f"          {pkg_energy:.2f} Joules power/energy-pkg/\n")
+                f.write(f"          {cores_energy:.2f} Joules power/energy-cores/\n")
+                f.write(f"          {core_percentage * 100:.2f}% core percentage (cores/pkg)\n")
             logger.info(f"Energy data stored in fallback file: {energy_file}")
             
     def update_function_name(self, task, function_name):
@@ -527,6 +543,9 @@ class EnergyMonitor:
         import os
         
         logger = logging.getLogger(__name__)
+        
+        # Store function name
+        self.function_name = function_name
         
         try:
             # Get the current working directory
@@ -564,3 +583,36 @@ class EnergyMonitor:
                 logger.warning(f"JSON file not found for updating function name: {json_file}")
         except Exception as e:
             logger.error(f"Error updating function name in JSON file: {e}")
+            
+    def read_function_name_from_stats(self, stats_file):
+        """Read function name from stats file and update it in the energy monitor."""
+        import logging
+        
+        logger = logging.getLogger(__name__)
+        
+        if not os.path.exists(stats_file):
+            logger.warning(f"Stats file not found: {stats_file}")
+            return False
+        
+        function_name_updated = False
+        logger.info(f"Reading stats file for energy monitoring: {stats_file}")
+        
+        try:
+            with open(stats_file, 'r') as fid:
+                for line in fid.readlines():
+                    try:
+                        key, value = line.strip().split(" ", 1)
+                        if key == 'function_name':
+                            self.function_name = value
+                            function_name_updated = True
+                            logger.info(f"Found function name in stats file for energy monitoring: {self.function_name}")
+                            break  # Exit loop once function name is found
+                    except Exception as e:
+                        logger.error(f"Error processing stats file line for energy monitoring: {line} - {e}")
+            
+            if not function_name_updated:
+                logger.warning("Function name not found in stats file for energy monitoring")
+        except Exception as e:
+            logger.error(f"Error reading stats file for energy monitoring: {e}")
+            
+        return function_name_updated

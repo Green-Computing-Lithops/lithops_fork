@@ -1,6 +1,6 @@
 lithops:
     backend: localhost
-    storage: localhost
+    storage: minio
  
     #data_cleaner: <True/False>
     #monitoring: storage
@@ -14,10 +14,10 @@ lithops:
     #log_stream: ext://sys.stdout
     #log_filename <path_to_a_file>
 
-localhost:
+# localhost:
  
-    # runtime: ml-runtime
-    runtime: docker.io/lithopscloud/ibmcf-python-v312
+#     # runtime: ml-runtime
+#     runtime: docker.io/lithopscloud/ibmcf-python-v312
 
     # https://github.com/lithops-cloud/lithops/blob/master/docs/source/compute_config/localhost.md 
     # https://lithops-cloud.github.io/docs/source/cli.html#lithops-runtime-build-runtime-name
@@ -174,11 +174,12 @@ localhost:
     #access_key: <ACCESS_KEY>
     #secret_key: <ACCESS_KEY>
     
-# minio:
-#     storage_bucket: lithops-test
-#     endpoint: http://localhost:9000
-#     access_key_id: minioadmin
-#     secret_access_key: minioadmin
+minio:
+    # storage_bucket: lithops-test
+    storage_bucket: test-bucket
+    endpoint: http://192.168.1.168:9000 # dentro de docker s3 / minio: self deployed accesible desde ambos entornos : 172.17.0.1 --> r
+    access_key_id: minioadmin
+    secret_access_key: minioadmin
     
 #redis:
     #host: <ENDPOINT_URL>

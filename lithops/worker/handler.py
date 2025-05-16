@@ -43,10 +43,6 @@ from lithops.constants import JOBS_PREFIX, LITHOPS_TEMP_DIR, MODULES_DIR
 from lithops.utils import setup_lithops_logger, is_unix_system
 from lithops.worker.status import create_call_status
 from lithops.worker.utils import SystemMonitor
-
-##~~ENERGY~~##
-import subprocess
-import re
 from lithops.worker.energymonitor import EnergyMonitor
 
 pickling_support.install()
@@ -214,28 +210,16 @@ def run_task(task):
         process_id = os.getpid() if is_unix_system() else mp.current_process().pid
         sys_monitor = SystemMonitor(process_id)
         
-        ##~~ENERGY~~##
-        # Initialize function_name variable
-        energy_monitor = EnergyMonitor(process_id)
-        function_name = None
+        # Initialize energy monitor
+        energy_monitor = EnergyMonitor(process_id)# ##~~ENERGY~~##
         
         # Try to read function name from stats file if it already exists
         if os.path.exists(task.stats_file):
-            logger.info(f"Reading stats file before execution: {task.stats_file}")
-            with open(task.stats_file, 'r') as fid:
-                for line in fid.readlines():
-                    try:
-                        key, value = line.strip().split(" ", 1)
-                        if key == 'function_name':
-                            function_name = value
-                            logger.info(f"Found function name in stats file before execution: {function_name}")
-                    except Exception as e:
-                        logger.error(f"Error processing stats file line before execution: {line} - {e}")
-        
+            energy_monitor.read_function_name_from_stats(task.stats_file)# ##~~ENERGY~~##
         
         # Start monitoring
         sys_monitor.start()
-        energy_monitor_started = energy_monitor.start() # ##~~ENERGY~~##
+        energy_monitor_started = energy_monitor.start()# ##~~ENERGY~~##
         
         # Start and wait for the job
         jrp.start()
@@ -243,7 +227,7 @@ def run_task(task):
         
         # Stop monitoring
         sys_monitor.stop()
-        energy_monitor.stop() # ##~~ENERGY~~##
+        energy_monitor.stop()# ##~~ENERGY~~##
 
         logger.debug('JobRunner process finished')
 
@@ -261,13 +245,11 @@ def run_task(task):
         call_status.add('worker_func_vms', mem_info['vms'])
         call_status.add('worker_func_uss', mem_info['uss'])
         
-        ##~~ENERGY~~##
-        #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-        # inigo: Calculate average CPU usage across all cores
+        # Calculate average CPU usage across all cores
         avg_cpu_usage = sum(cpu_info['usage']) / len(cpu_info['usage']) if cpu_info['usage'] else 0
         call_status.add('worker_func_avg_cpu_usage', avg_cpu_usage)
         call_status.add('worker_func_energy_consumption', avg_cpu_usage * round(cpu_info['user'], 8))
-        #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        
         # Add energy monitoring data
         if energy_monitor_started:
             energy_data = energy_monitor.get_energy_data()
@@ -286,18 +268,16 @@ def run_task(task):
                 for metric, value in energy_data['energy'].items():
                     call_status.add(f'worker_func_energy_{metric}', value)
                 
-                # Add total energy consumption (same as energy_cpu for now)
-                call_status.add('worker_func_perf_energy', energy_data['energy'])
+                # Add energy metrics for pkg and cores
                 call_status.add('worker_func_perf_energy_pkg', energy_data['energy']['pkg'])
                 call_status.add('worker_func_perf_energy_cores', energy_data['energy']['cores'])
-                
-                # Add energy efficiency (energy per time)
-                if energy_data['duration'] > 0:
-                    energy_efficiency = energy_data['energy']['total'] / energy_data['duration']
-                    call_status.add('worker_func_energy_efficiency', energy_efficiency)
+            
+            # Read function name from stats file if it exists
+            if os.path.exists(task.stats_file):
+                energy_monitor.read_function_name_from_stats(task.stats_file)
             
             # Log energy data and store it in JSON format
-            energy_monitor.log_energy_data(energy_data, task, cpu_info, function_name)
+            energy_monitor.log_energy_data(energy_data, task, cpu_info, energy_monitor.function_name)
 
         if jrp.is_alive():
             # If process is still alive after jr.join(job_max_runtime), kill it
@@ -329,27 +309,6 @@ def run_task(task):
                         call_status.add(key, value)
                     if key in ['exception', 'exc_pickle_fail']:
                         call_status.add(key, eval(value))
-        
-        ##~~ENERGY~~##
-        # Handle function name separately for energy monitoring
-        if energy_monitor_started and os.path.exists(task.stats_file):
-            function_name_updated = False
-            logger.info(f"Reading stats file after execution for energy monitoring: {task.stats_file}")
-            with open(task.stats_file, 'r') as fid:
-                for line in fid.readlines():
-                    try:
-                        key, value = line.strip().split(" ", 1)
-                        if key == 'function_name':
-                            function_name = value
-                            function_name_updated = True
-                            logger.info(f"Found function name in stats file for energy monitoring: {function_name}")
-                            energy_monitor.update_function_name(task, function_name)
-                            break  # Exit loop once function name is found
-                    except Exception as e:
-                        logger.error(f"Error processing stats file line for energy monitoring: {line} - {e}")
-            
-            if not function_name_updated:
-                logger.warning("Function name not found in stats file for energy monitoring")
 
     except KeyboardInterrupt:
         job_interruped = True

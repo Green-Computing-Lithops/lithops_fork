@@ -21,6 +21,8 @@ import logging
 import pickle
 import platform
 import subprocess
+import time
+import threading
 from contextlib import contextmanager
 
 from lithops.version import __version__ as lithops_ver
@@ -288,6 +290,52 @@ class SystemMonitor:
         self.cpu_times = None
         self.current_net_io = None
         self.mem_info = None
+        
+        # New attributes for continuous CPU monitoring
+        self.monitoring = False
+        self.monitor_thread = None
+        self.cpu_activity = []  # List to store CPU activity data
+        self.cpu_threshold = 5.0  # CPU usage threshold (%) to consider a core active
+        self.start_timestamp = None
+        self.end_timestamps = None  # Will be a list of timestamps when each core stops being active
+
+    def _monitor_cpu_activity(self):
+        """
+        Background thread function to continuously monitor CPU activity.
+        Records the last time each CPU core was active above the threshold.
+        """
+        if not psutil_found:
+            return
+            
+        logger.debug("Starting continuous CPU activity monitoring")
+        
+        # Initialize end timestamps with None values
+        num_cores = len(psutil.cpu_percent(interval=None, percpu=True))
+        self.end_timestamps = [None] * num_cores
+        
+        while self.monitoring:
+            try:
+                # Get current CPU usage for each core
+                current_usage = psutil.cpu_percent(interval=0.5, percpu=True)
+                current_time = time.time()
+                
+                # Update end timestamps for cores that are active
+                for i, usage in enumerate(current_usage):
+                    if usage >= self.cpu_threshold:
+                        # Core is active, update its end timestamp
+                        self.end_timestamps[i] = current_time
+                
+                # Store the CPU activity data
+                self.cpu_activity.append({
+                    'timestamp': current_time,
+                    'usage': current_usage
+                })
+                
+            except Exception as e:
+                logger.error(f"Error in CPU activity monitoring: {e}")
+                break
+                
+        logger.debug("Stopped continuous CPU activity monitoring")
 
     def start(self):
         """
@@ -297,13 +345,20 @@ class SystemMonitor:
             return
 
         self.process = psutil.Process(self.process_id)
+        self.start_timestamp = time.time()
 
-        # record the initial CPU usage (to be ignored).
+        # Record the initial CPU usage (to be ignored).
         psutil.cpu_percent(interval=None, percpu=True)
 
         # Reset the network IO counters cache and baseline.
         psutil.net_io_counters.cache_clear()
         self.start_net_io = psutil.net_io_counters()
+        
+        # Start continuous CPU monitoring in a background thread
+        self.monitoring = True
+        self.monitor_thread = threading.Thread(target=self._monitor_cpu_activity)
+        self.monitor_thread.daemon = True
+        self.monitor_thread.start()
 
     def stop(self):
         """
@@ -311,21 +366,40 @@ class SystemMonitor:
         """
         if not psutil_found:
             return
+            
+        # Stop the continuous monitoring thread
+        self.monitoring = False
+        if self.monitor_thread:
+            self.monitor_thread.join(timeout=2.0)  # Wait for the thread to finish
 
         # Record the CPU usage since the last call (start).
         self.cpu_usage = psutil.cpu_percent(interval=None, percpu=True)
         self.cpu_times = psutil.cpu_times()
         self.current_net_io = psutil.net_io_counters()
         self.mem_info = self.process.memory_full_info()
+        
+        # Ensure all end timestamps are set
+        # If a core was never active, set its end timestamp to the start timestamp
+        if self.end_timestamps:
+            for i in range(len(self.end_timestamps)):
+                if self.end_timestamps[i] is None:
+                    self.end_timestamps[i] = self.start_timestamp
 
     def get_cpu_info(self):
         """
-        Return CPU usage, system time, and user time for each CPU core.
+        Return CPU usage, system time, user time for each CPU core,
+        and start/end timestamps for CPU activity.
         """
         if not psutil_found:
-            return {"usage": [], "system": 0, "user": 0}
+            return {"usage": [], "system": 0, "user": 0, "start_timestamp": None, "end_timestamps": []}
 
-        return {"usage": self.cpu_usage, "system": self.cpu_times.system, "user": self.cpu_times.user}
+        return {
+            "usage": self.cpu_usage, 
+            "system": self.cpu_times.system, 
+            "user": self.cpu_times.user,
+            "start_timestamp": self.start_timestamp,
+            "end_timestamps": self.end_timestamps
+        }
 
     def get_network_io(self):
         """

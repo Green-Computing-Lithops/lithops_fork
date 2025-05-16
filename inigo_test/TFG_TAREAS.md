@@ -105,6 +105,15 @@ por detras: algoritmo de normalizacion de datos comparativa ejecuciones pasadas
 
 comparar : algoritmo de normalizacion en base de lo que ha pasado anterior 
 
+## SEMANA 8: SALTO / vas atrasado / recuperar 
+* finalizar valores para todas las ejecutiones --> prioritario --> directamente ejecucion 
+* script cleaning diferentes 
+* incluir varias mediciones de energia 
+* extras: powerapi / detector de cpu / ver ejecucion / tdp database 
+* empezar a escribir 
+
+
+
 
 # MANRI : 
 1. Minio: plataforma de objet storage de codigo abierto --> docker --> hacer pruebas 
@@ -328,15 +337,14 @@ wsl --update
 python -m venv venv
 python3 -m venv venv
 
-
+### Activate: 
 venv\Scripts\activate // for mac
 venv\Scripts\Activate.ps1 // for windows
 source venv/bin/activate 
 source .venv/bin/activate 
 source lithops-venv/bin/activate 
 
-
-### to finish the sesion: 
+### deactivate / finalize sesion: 
 deactivate
 
 ### comprobacion elementos de entorno virtual
@@ -357,6 +365,7 @@ pip install -e ".[all]" --break-system-packages
 pip install -e ".[all]" 
 
 
+# lithops config file 
 # lithops yaml
 https://github.com/lithops-cloud/lithops/blob/master/config/config_template.yaml
 
@@ -386,6 +395,127 @@ pip install --force-reinstall lithops
 C:\Users\Usuario\Desktop\lithops\lithops\__init__.py
 pip uninstall lithops -y
 rmdir /s /q C:\Users\Usuario\Desktop\lithops\lithops
+
+
+# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+# FLEXECUTOR
+### sources in flexecutor: 
+python3 -m venv venv-flexecutor
+
+### Activate: 
+source venv-flexecutor/bin/activate 
+
+### install lithops in flexecutor: 
+pip install --upgrade pip
+pip install -e ../lithops_fork/
+pip install -e . --break-system-packages
+
+pip install -e /home/bigrobbin/Desktop/TFG/lithops_fork 
+
+### LITHOPS_CONFIG: inside venv-flexecutor
+python -c "import lithops; print(lithops.__file__)"
+
+### where configuration lithops is : 
+
+# LITHOPS_CONFIG_FILE system environment variable FLEXECUTOR:
+* /path/to/your/config
+export LITHOPS_CONFIG_FILE=/home/bigrobbin/Desktop/TFG/flexecutor-main/config_template.yaml   
+
+* to usset 
+unset LITHOPS_CONFIG_FILE
+
+echo $LITHOPS_CONFIG_FILE
+ls ~/.lithops/config ./.lithops_config /etc/lithops/config
+
+
+nano ~/.lithops/config
+
+# command:  
+python -c "import lithops; print(lithops.__file__)"
+
+### MinIO:
+docker start minio
+
+
+# all unified: 
+source venv-flexecutor/bin/activate 
+export LITHOPS_CONFIG_FILE=/home/bigrobbin/Desktop/TFG/flexecutor-main/config_template.yaml  
+docker start minio
+ 
+
+
+ 
+# REPASO GENERAL: 
+1. variables de entorno
+2. Activar
+3. instalar dependencias flexecutor
+4. desinstalar lithops 
+5. instalar lithops especifico con -e 
+6. mostrar la ruta de configuracion al fichero lithops
+7. configurar minio
+8. subir datos a minio -> mismo bucket 
+9. evitar dependencias minio: 
+10. (MANRI): errores de elementos 
+- comentar valores json 
+- error 9
+- diferencias energia 
+- Error: parametro de un map iterdata , array maximo : idealmente 
+
+# pasar directamente storage bucket : word counter directamente un fichero en object storage directamente ahi 
+https://lithops-cloud.github.io/docs/source/data_processing.html
+https://lithops-cloud.github.io/docs/source/data_partitioning.html
+Processing data from the Cloud — Lithops  documentation
+ 
+
+
+
+# manri error 9 : error 1= cuando finalizan bien 
+lithops logs poll
+R
+comentar con manri: 
+==== ENERGY MONITOR INITIALIZED FOR PROCESS 9 ====
+2025-05-13 18:08:43,341 [INFO] handler.py:224 -- Reading stats file before execution: /tmp/lithops-bigrobbin/storage/lithops.jobs/aaf05f-0-M000/00000/job_stats.txt
+ 
+
+
+
+# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+# minio 
+# poner los datos en minio: 
+test-bucket/
+└── training-data/          (empty “folder”)
+    └── training-data/
+        └── train_pca_transform.txt
+
+1) nuke the entire training-data prefix in one go:
+mc rm --recursive --force myminio/test-bucket/training-data
+
+2) Re‐upload only the contents of your local training-data folder 
+mc cp -r /home/bigrobbin/Desktop/TFG/flexecutor-main/test-bucket/training-data myminio/test-bucket/training-data
+
+2.1)
+mc cp -r /home/bigrobbin/Desktop/TFG/flexecutor-main/test-bucket/training-data myminio/test-bucket/
+
+
+3) Verify
+mc ls myminio/test-bucket/training-data
+4) Rerun your pipeline
+
+
+ver si servidor minio esta accesible: 
+telnet 192.168.1.168 9000
+
+# minio 
+6. put all elements:
+mc cp -r /home/bigrobbin/Desktop/REPASO/flexecutor/test-bucket/ myminio/test-bucket/
+7. recordar configuracion en vez de localhost la propia de minio 
+8. export LITHOPS_CONFIG_FILE=/home/bigrobbin/Desktop/REPASO/flexecutor/config.yaml  --> mejor que config normal 
+- comandos 
+ 
+source venv-flexecutor/bin/activate 
+export LITHOPS_CONFIG_FILE=/home/bigrobbin/Desktop/REPASO/flexecutor/config.yaml
+docker start minio
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -454,8 +584,244 @@ lithops logs poll
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
  
+GERMAN REVISIONES: 
+(venv) bigrobbin@bigrobbin:~/Desktop/TFG$ sudo groupadd docker
+groupadd: group 'docker' already exists
+(venv) bigrobbin@bigrobbin:~/Desktop/TFG$ sudo usermod -aG docker $USER
+(venv) bigrobbin@bigrobbin:~/Desktop/TFG$ newgrp docker
+bigrobbin@bigrobbin:~/Desktop/TFG$ docker run  hello-world
+
+german: 
+usuario no permisos sobre docker --> bigrrobin 
+
+diferentes entornos con configuraciones 
+imagen --> definir el container con una imagen especifica
+
+
+runtime: docker.io/lithopscloud/ibmcf-python-v312 # imagen publica en docker: 
+* permisos especiales por default --> usuario normal no tiene permisos 
+* anadir usuario al grupo de docker 
+(venv) bigrobbin@bigrobbin:~/Desktop/TFG$ docker ps
+permission denied while trying to connect to the Docker daemon socket at 
+
+
+unix:///var/run/docker.sock: Get "http://%2Fvar%2Frun%2Fdocker.sock/v1.45/containers/json": dial unix /var/run/docker.sock: connect: permission denied
+
+framework programacion 
+por debajo container 
+no podias correr containers de locker 
+
+hello world de docker --> 
+primero a gestionar c group de docker 
+https://stackoverflow.com/questions/48957195/how-to-fix-docker-permission-denied
+
+
+
+ docker ps -a
+
+ 
+(venv) bigrobbin@bigrobbin:~/Desktop/TFG$ docker rm minio
+Error response from daemon: No such container: minio
+(venv) bigrobbin@bigrobbin:~/Desktop/TFG$ docker rm /minio-server
+
+
+ 
+    
+time sleep_pro 
+forzar cpu loggaritmo --> replantear funcion 
+chunck --> dividir en 2 
+que la funcion que haga 
+1000 ciclos
+2 500 ciclos 
+4 250 ciclos 
+
+weak scaling 
+automatizar sobre ese codigo --> cambiar para que sea 
+consumo de energia segun paralelismo 
+minio y runtimes 
+automatizas + plot 
+
+
+
+# GERMAN eror docker tipico : 
+error docker --> clasico permisos
+lithops logs poll
+
+docker ps -a
+* no puedes usar sudo pq en las maquinas virtuales y funciones no permite
+* eliminar imagenes no necesarios: docker rm /minio-server
+
+# POC
+* word count: 
+    - 1 lee 
+    - 2 archivo la mitad 
+
+# web interface / rest api 
 
  
 
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+
+
+
+
+prompt : I want a detailed guide and process of how to run this file: main_german.py
+ 
+i am having some problems for the execution of a simple example using lithops with minio. The file is 
+
+1) venv and installed lithops from my fork folder using: 
+source venv-flexecutor/bin/activate 
+pip install -e ../lithops_fork/
+
+
+2) set the configuration to this file: 
+export LITHOPS_CONFIG_FILE=/home/bigrobbin/Desktop/TFG/flexecutor-main/config_template.yaml   
+
+3) minio storage / runtime selected and iniciated
+docker start minio
+
+To check the logs is useful the command :  lithops logs poll
+
+
+
+
+## after meeting: 
+
+Flexecutor acts as a wrapper of lithops: 
+i want to store the energy measures imported by lithops in this folder
+examples/ml/profiling/machine_learning 
+1) if i delete the json inside the folder i obtain errors, why is that? is correct? whould not be useful if the json are generated in each execution.
+
+2) after run examples/ml/main.py  is always needed to run  minio_cleanup.py to do not have elements inside minio to dificult the execution. 
+
+3) how i can store the measures of energy in examples/ml/profiling/machine_learning  after running examples/ml/main.py ?  
+
+
+
+# 
+# Flexecutor
+A flexible and DAG-optimized executor over Lithops
+
+*Documentation pending to be written*
+
+
+# ERRORES: 
+1. circular imports 
+2. dependencias flexecutor / diferentes carpetas
+3. flexecutor : cd /home/bigrobbin/Desktop/REPASO/flexecutor && /home/bigrobbin/Desktop/REPASO/flexecutor/venv-flexecutor/bin/python -m pip install -e .
+4. dataplug & cloud objets: /home/bigrobbin/Desktop/REPASO/flexecutor/venv-flexecutor/bin/python -m pip install dataplug
+
+5. PYTHONPATH=. python3 examples/mini/dag_profiling.py
+
+
+
+# prompt inicial : 
+
+Explícame detalladamente los siguientes pasos para ejecutar flexecutor un entorno de pruebas:
+
+1. He instalado MinIO en un entorno local y va a actuar como object storage
+2. Tiene un bucket llamado "test-bucket" donde almacenaré archivos de prueba.
+
+3. quiero que experimentes con ejecuciones varios ejemplos ubicados en examples/{ml|video}.
+
+4. En los scripts de los casos de uso (examples/ml/main.py y examples/video/main.py), específicamente en la variable FlexData.prefix, encontraré las rutas donde debo subir los archivos de entrada para las diferentes aplicaciones.
+
+5. El objetivo final es ejecutar diferentes configuraciones utilizando la operación DAGExecutor.profile y recopilar métricas de cada configuración.
+
+Por favor, proporciona instrucciones paso a paso sobre:
+ 
+- Cómo ejecutar DAGExecutor.profile con diferentes configuraciones (examples/ml/main.py y examples/video/main.py)
+- Cómo recopilar y analizar los datos de consumo energético
+
+
+IMPORTANTE: 
+- centrate en la estructura existente y en entender como funciona, no crees archivos nuevos si no es absolutamente necesario 
+
+Incluye ejemplos de comandos específicos que debería ejecutar en cada paso.
+
+
+# error retorno 
+código de retorno -9, lo que generalmente indica que el proceso fue terminado por una señal SIGKILL
+
+
+lithops:
+    backend: localhost 
+    storage: minio  
+
+ 
+
+
+minio:
+    # storage_bucket: lithops-test
+    storage_bucket: test-bucket
+    endpoint: http://192.168.1.168:9000 # dentro de docker s3 / minio: self deployed accesible desde ambos entornos : 172.17.0.1 --> r
+    access_key_id: minioadmin
+    secret_access_key: minioadmin
+<!-- # 
+# (venv-flexecutor) bigrobbin@bigrobbin:~/Desktop/TFG/flexecutor-main$ telnet 172.17.0.1 9000
+# Trying 172.17.0.1...
+# Connected to 172.17.0.1.
+# Escape character is '^]'.
+
+# sudo entorno de docker --> $  -->
+
+
+
+
+docker start minio
+source venv-flexecutor/bin/activate
+export LITHOPS_CONFIG_FILE=/home/bigrobbin/Desktop/REPASO/flexecutor/config.yaml
+
+
+Vale entiendo lo que me propones pero hay areas de mejora: 
+1. tras la ejecucion de examples/ml/main_profile.py se ha quedado estancado. 
+- 2025-05-16 00:08:02,254 [INFO] invokers.py:225 -- ExecutorID 6d6aec-0 | JobID M004 - View execution logs at /tmp/lithops-bigrobbin/logs/6d6aec-0-M004.log
+2025-05-16 00:08:02,254 [INFO] wait.py:101 -- ExecutorID 6d6aec-0 - Waiting for 1 function activations to complete
+
+2. Me puedes explicar paso a paso como y por que se generan los  archivos json generados examples/ml/profiling/machine_learning , 
+3. Ademas explicame el comportamiento de las diferentes fases y el orden entre ellas: 
+- executor.train() 
+- executor.predict(config)
+- executor.optimize()
+
+asi como generan : 
+- examples/*/images/
+- examples/*/profiling/
+- examples/*/profiling/mocks
+- examples/*/models/
+
+
+
+
+
+
+
+
+
+
+
+
+
+# manri : 
+* 65 tdp --> worker? 
+ dentro de los lambda
+  + diccionario :  
+
+prompt : 
+
+what i want is to store in the json file the following information: 
+from : 
+  "cpu_usage": [
+    {
+      "cpu_id": 0,
+      "cpu_percent": 4.0,
+      "timestamp": 1747414204.524089 
+To 
+  "cpu_usage": [
+    {
+      "cpu_id": 0,
+      "cpu_percent": 4.0,
+      "start_timestamp": 1747414204.524089 
+      "end_timestamp": 18147414204.524089 
