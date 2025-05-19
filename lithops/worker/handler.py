@@ -43,11 +43,16 @@ from lithops.constants import JOBS_PREFIX, LITHOPS_TEMP_DIR, MODULES_DIR
 from lithops.utils import setup_lithops_logger, is_unix_system
 from lithops.worker.status import create_call_status
 from lithops.worker.utils import SystemMonitor
-from lithops.worker.energymonitor import EnergyMonitor
+from lithops.worker.energy_manager import EnergyManager
+from lithops.worker.processor_info import add_processor_info_to_task
 
 pickling_support.install()
 
 logger = logging.getLogger(__name__)
+
+# Flag to control whether to run both energy monitors at once
+# Set to True to run both eBPF and regular energy monitors simultaneously
+RUN_BOTH_ENERGY_MONITORS = False
 
 
 class ShutdownSentinel:
@@ -198,7 +203,11 @@ def run_task(task):
 
     job_interruped = False
 
-    try:
+    try:        
+        ##~~ENERGY~~##
+        # Get processor information and add it to call status
+        add_processor_info_to_task(task, call_status)
+
         # send init status event
         call_status.send_init_event()
 
@@ -210,16 +219,16 @@ def run_task(task):
         process_id = os.getpid() if is_unix_system() else mp.current_process().pid
         sys_monitor = SystemMonitor(process_id)
         
-        # Initialize energy monitor
-        energy_monitor = EnergyMonitor(process_id)# ##~~ENERGY~~##
+        ##~~ENERGY~~##
+        # Initialize energy manager
+        energy_manager = EnergyManager(process_id, RUN_BOTH_ENERGY_MONITORS)
         
-        # Try to read function name from stats file if it already exists
-        if os.path.exists(task.stats_file):
-            energy_monitor.read_function_name_from_stats(task.stats_file)# ##~~ENERGY~~##
+        # Read function name from stats file if it exists
+        energy_manager.read_function_name_from_stats(task.stats_file)
         
         # Start monitoring
         sys_monitor.start()
-        energy_monitor_started = energy_monitor.start()# ##~~ENERGY~~##
+        energy_manager.start()
         
         # Start and wait for the job
         jrp.start()
@@ -227,10 +236,11 @@ def run_task(task):
         
         # Stop monitoring
         sys_monitor.stop()
-        energy_monitor.stop()# ##~~ENERGY~~##
+        energy_manager.stop()
 
         logger.debug('JobRunner process finished')
 
+        # Process system monitoring data
         cpu_info = sys_monitor.get_cpu_info()
         call_status.add('worker_func_cpu_usage', cpu_info['usage'])
         call_status.add('worker_func_cpu_system_time', round(cpu_info['system'], 8))
@@ -245,39 +255,17 @@ def run_task(task):
         call_status.add('worker_func_vms', mem_info['vms'])
         call_status.add('worker_func_uss', mem_info['uss'])
         
-        # Calculate average CPU usage across all cores
+        ##~~ENERGY~~##
+        #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        # inigo: Calculate average CPU usage across all cores
         avg_cpu_usage = sum(cpu_info['usage']) / len(cpu_info['usage']) if cpu_info['usage'] else 0
         call_status.add('worker_func_avg_cpu_usage', avg_cpu_usage)
         call_status.add('worker_func_energy_consumption', avg_cpu_usage * round(cpu_info['user'], 8))
         
-        # Add energy monitoring data
-        if energy_monitor_started:
-            energy_data = energy_monitor.get_energy_data()
-            
-            # Add duration and source
-            call_status.add('worker_func_energy_duration', energy_data['duration'])
-            call_status.add('worker_func_energy_source', energy_data.get('source', 'unknown'))
-            
-            # Add CPU percent if available (for CPU-based estimation)
-            if 'cpu_percent' in energy_data:
-                call_status.add('worker_func_energy_cpu_percent', energy_data['cpu_percent'])
-            
-            # Add energy metrics
-            if energy_data['energy']:
-                # Add individual energy metrics
-                for metric, value in energy_data['energy'].items():
-                    call_status.add(f'worker_func_energy_{metric}', value)
-                
-                # Add energy metrics for pkg and cores
-                call_status.add('worker_func_perf_energy_pkg', energy_data['energy']['pkg'])
-                call_status.add('worker_func_perf_energy_cores', energy_data['energy']['cores'])
-            
-            # Read function name from stats file if it exists
-            if os.path.exists(task.stats_file):
-                energy_monitor.read_function_name_from_stats(task.stats_file)
-            
-            # Log energy data and store it in JSON format
-            energy_monitor.log_energy_data(energy_data, task, cpu_info, energy_monitor.function_name)
+        # Process energy monitoring data
+        energy_manager.process_energy_data(task, call_status, cpu_info)
+        #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
 
         if jrp.is_alive():
             # If process is still alive after jr.join(job_max_runtime), kill it
@@ -299,6 +287,8 @@ def run_task(task):
             msg = 'Function exceeded maximum memory and was killed'
             raise MemoryError('HANDLER', msg)
 
+        ##~~ENERGY~~##
+        # # Process stats file
         if os.path.exists(task.stats_file):
             with open(task.stats_file, 'r') as fid:
                 for line in fid.readlines():
@@ -309,6 +299,10 @@ def run_task(task):
                         call_status.add(key, value)
                     if key in ['exception', 'exc_pickle_fail']:
                         call_status.add(key, eval(value))
+
+        ##~~ENERGY~~##
+        # Update function name in energy data if available
+        energy_manager.update_function_name(task, cpu_info, task.stats_file)
 
     except KeyboardInterrupt:
         job_interruped = True

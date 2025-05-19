@@ -417,7 +417,7 @@ class EnergyMonitor:
         print()
         
         # Store energy consumption data in JSON format
-        self._store_energy_data_json(energy_data, task, cpu_info, pkg_energy, cores_energy, core_percentage, self.function_name)
+        self._store_energy_data_json(energy_data, task, cpu_info, pkg_energy, cores_energy, core_percentage, function_name)
         
     def _store_energy_data_json(self, energy_data, task, cpu_info, pkg_energy, cores_energy, core_percentage, function_name=None):
         """Store energy data in JSON format."""
@@ -450,6 +450,16 @@ class EnergyMonitor:
             # Create a unique ID for this execution
             execution_id = f"{task.job_key}_{task.call_id}"
             
+            # Calculate additional metrics
+            duration = energy_data['duration']
+            energy_efficiency = pkg_energy / max(duration, 0.001)  # Watts
+            
+            # Calculate average CPU usage
+            avg_cpu_usage = sum(cpu_info['usage']) / len(cpu_info['usage']) if cpu_info['usage'] else 0
+            
+            # Calculate energy per CPU usage
+            energy_per_cpu = pkg_energy / max(avg_cpu_usage, 0.01)  # Joules per % CPU
+            
             # Main energy consumption data
             energy_consumption = {
                 'job_key': task.job_key,
@@ -460,7 +470,16 @@ class EnergyMonitor:
                 'core_percentage': core_percentage,
                 'duration': energy_data['duration'],
                 'source': energy_data.get('source', 'unknown'),
-                'function_name': function_name
+                'function_name': function_name,
+                # Additional metrics
+                'energy_efficiency': energy_efficiency,  # Watts
+                'avg_cpu_usage': avg_cpu_usage,  # %
+                'energy_per_cpu': energy_per_cpu,  # Joules per % CPU
+                'cpu_count': len(cpu_info['usage']),  # Number of CPU cores
+                'active_cpus': sum(1 for cpu in cpu_info['usage'] if cpu > 5),  # Number of active CPU cores (>5%)
+                'max_cpu_usage': max(cpu_info['usage']) if cpu_info['usage'] else 0,  # Maximum CPU usage
+                'system_time': cpu_info.get('system', 0),  # System CPU time
+                'user_time': cpu_info.get('user', 0)  # User CPU time
             }
             
             # CPU usage data
@@ -517,7 +536,10 @@ class EnergyMonitor:
                 'timestamp': timestamp,
                 'energy_pkg': pkg_energy,
                 'energy_cores': cores_energy,
-                'core_percentage': core_percentage
+                'core_percentage': core_percentage,
+                'energy_efficiency': energy_efficiency,
+                'avg_cpu_usage': avg_cpu_usage,
+                'energy_per_cpu': energy_per_cpu
             })
             
             with open(summary_file, 'w') as f:

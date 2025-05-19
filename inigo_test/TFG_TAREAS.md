@@ -396,6 +396,11 @@ C:\Users\Usuario\Desktop\lithops\lithops\__init__.py
 pip uninstall lithops -y
 rmdir /s /q C:\Users\Usuario\Desktop\lithops\lithops
 
+# all unified: 
+source lithops-venv/bin/activate 
+export LITHOPS_CONFIG_FILE='/home/bigrobbin/Desktop/TFG/lithops_fork/lithops_config'
+docker start minio
+ 
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 # FLEXECUTOR
@@ -825,3 +830,91 @@ To
       "cpu_percent": 4.0,
       "start_timestamp": 1747414204.524089 
       "end_timestamp": 18147414204.524089 
+
+
+
+
+
+
+prompt: 
+
+I need help into architectural design, could you sumarize  all the files that are used from lithops since the execution. 
+i mean with a brief description 
+
+first one secuential sumary 
+
+general_test_map_reduce.py  > lithops/executors.py  >  ... > handler.py > energy_manager > energy monitor
+
+And then i want a bit of explanation of the project where you briefly explain wich desing pattern is being used and how critical is its performance in the thread workers
+
+
+# PROMPT 2: 
+
+Act as a Architectural software engieneer and analyze the architecture of my Lithops-based project. Please provide:
+
+1. A sequential summary of all files involved in the execution flow, starting from general_test_map_reduce.py through to the energy monitoring components. For each file, provide a brief description of its purpose and role in the execution pipeline.
+ 
+
+2. An architectural analysis that identifies each file for:
+   - its main purpose
+   - The key design patterns being used in the project
+   - How these patterns affect the performance of thread workers and all flow
+   - Critical performance considerations in the execution flow
+   - The relationship between the core execution components and the energy management system
+   - Add important information to present to the project 
+
+
+# con ese promt --> disenas flujo de trabajo lithops + tfg 
+
+pregunta como diseno de patrones como integrar energia de forma escalable sin alterar handler.py  
+como crear una pequena interfaz o elemento que incluya diversos elementos de electricidad 
+
+
+
+Act as a Architectural software engieneer you are in charge to  introduced the energy elements into an existing framework call lithops  but: 
+- I want to have  nice patterns included 
+- An option to don't use the energy module with energy = False
+- I need to be able to implement new energy measurements tools, now are only 2 but in the future could be 10, so maintain an easy inclusion of each energy element
+so keep that in mind to suggest how to design the project 
+
+
+
+PROMPT ARCHITECTURE: 
+
+
+Aswer deep searh: 
+Act as an Architectural Software Engineer tasked with integrating energy monitoring capabilities into the Lithops framework. Design a modular energy monitoring system with the following requirements:
+
+1. Recommend appropriate design patterns for seamlessly integrating energy monitoring into Lithops without disrupting its core functionality. Consider patterns like:
+   - Factory Method or Abstract Factory for creating energy measurement tools
+   - Strategy Pattern for different energy measurement implementations
+   - Observer Pattern for monitoring energy events
+   - Decorator Pattern for optionally adding energy monitoring
+   - Any other patterns you believe would create a clean, maintainable architecture
+
+2. Include a mechanism to completely disable energy monitoring with a simple "energy=False" parameter, ensuring:
+   - Zero performance impact when disabled
+   - No code changes required to toggle this feature
+   - Clean handling of all related components when disabled
+
+3. Design for extensibility to accommodate future energy measurement tools:
+   - Currently supporting perf and eBPF as the two measurement tools
+   - Must scale to support 10+ tools in the future
+   - Allow for easy registration of new measurement tools without modifying core code
+   - Maintain consistent interfaces across all measurement implementations
+
+4. Ensure equal compatibility across all Lithops backend types:
+   - Serverless backends
+   - Standalone backends
+   - Localhost backends
+
+Please provide:
+- A high-level architectural diagram represented both:
+  * Visually (generated diagram)
+  * As detailed text with hierarchies and relationships clearly indicated
+- Interface definitions for the key components
+- Explanation of how the selected design patterns fulfill the requirements
+- Implementation considerations for ensuring performance is not significantly impacted
+- Code examples for critical integration points
+
+Consider how your design will interact with Lithops' existing components, particularly the execution flow from executors.py through handler.py.
