@@ -20,9 +20,7 @@ import time
 import re
 import subprocess
 import logging
-
-# Ensure json is imported in this scope
-import json
+from .energymonitor_json_utils import store_energy_data_json, update_function_name
 
 logger = logging.getLogger(__name__)
 
@@ -393,218 +391,64 @@ class EnergyMonitor:
         print()
         # Format the energy value with comma as decimal separator and dot as thousands separator
         pkg_energy = energy_data['energy'].get('pkg', 0)
-        # Handle the case where pkg_energy is 0 but we have CPU usage data
-        if pkg_energy == 0 and 'cpu_percent' in energy_data and energy_data['duration'] > 0:
-            # Estimate energy based on CPU usage and duration
-            # This is a very rough estimate based on typical TDP values
-            estimated_energy = energy_data['cpu_percent'] * energy_data['duration'] * 65.0  # 65W TDP
-            pkg_energy = estimated_energy
-            energy_data['energy']['pkg'] = pkg_energy
-            energy_data['source'] = 'cpu_estimate'
-            print(f"Using CPU-based energy estimate: {pkg_energy:.2f} Joules")
+        
+        # IMPROVED: Handle the case where pkg_energy is 0 - provide reasonable estimates
+        if pkg_energy == 0 and energy_data['duration'] > 0:
+            # Calculate average CPU usage from cpu_info
+            avg_cpu_usage = sum(cpu_info['usage']) / len(cpu_info['usage']) if cpu_info['usage'] else 0
+            
+            # If we have CPU usage data, estimate energy based on it
+            if avg_cpu_usage > 0:
+                # Estimate energy based on CPU usage and duration
+                # This is a rough estimate based on typical server TDP values
+                estimated_energy = (avg_cpu_usage / 100.0) * energy_data['duration'] * 85.0  # 85W server TDP
+                pkg_energy = estimated_energy
+                energy_data['energy']['pkg'] = pkg_energy
+                energy_data['source'] = 'cpu_estimate'
+                print(f"Using CPU-based energy estimate: {pkg_energy:.2f} Joules (based on {avg_cpu_usage:.1f}% CPU)")
+            elif 'cpu_percent' in energy_data and energy_data['cpu_percent'] > 0:
+                # Fallback to process CPU percentage
+                estimated_energy = energy_data['cpu_percent'] * energy_data['duration'] * 85.0  # 85W server TDP
+                pkg_energy = estimated_energy
+                energy_data['energy']['pkg'] = pkg_energy
+                energy_data['source'] = 'cpu_estimate'
+                print(f"Using CPU-based energy estimate: {pkg_energy:.2f} Joules")
+            else:
+                # Last resort: estimate based on duration assuming moderate CPU usage
+                estimated_energy = 0.3 * energy_data['duration'] * 85.0  # Assume 30% CPU usage
+                pkg_energy = estimated_energy
+                energy_data['energy']['pkg'] = pkg_energy
+                energy_data['source'] = 'duration_estimate'
+                print(f"Using duration-based energy estimate: {pkg_energy:.2f} Joules (assuming 30% CPU)")
         
         pkg_energy_str = f"{pkg_energy:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
         print(f"          {pkg_energy_str} Joules power/energy-pkg/")
         
-        # If we have cores energy data, print it too, otherwise estimate it as 90% of pkg
-        cores_energy = energy_data['energy'].get('cores', pkg_energy * 0.9)
+        # If we have cores energy data, print it too, otherwise estimate it as 80% of pkg
+        cores_energy = energy_data['energy'].get('cores', pkg_energy * 0.8)
+        if energy_data['energy'].get('cores', 0) == 0:
+            energy_data['energy']['cores'] = cores_energy
         cores_energy_str = f"{cores_energy:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
         print(f"          {cores_energy_str} Joules power/energy-cores/")
         
         # Print core percentage
-        core_percentage = energy_data['energy'].get('core_percentage', 0)
+        core_percentage = cores_energy / max(pkg_energy, 0.001)
+        if energy_data['energy'].get('core_percentage', 0) == 0:
+            energy_data['energy']['core_percentage'] = core_percentage
         print(f"          {core_percentage * 100:.2f}% core percentage (cores/pkg)")
         print()
         
-        # Store energy consumption data in JSON format
-        self._store_energy_data_json(energy_data, task, cpu_info, pkg_energy, cores_energy, core_percentage, function_name)
+        # Store energy consumption data in JSON format using shared utilities
+        store_energy_data_json(energy_data, task, cpu_info, pkg_energy, cores_energy, 
+                              core_percentage, function_name)
         
-    def _store_energy_data_json(self, energy_data, task, cpu_info, pkg_energy, cores_energy, core_percentage, function_name=None):
-        """Store energy data in JSON format."""
-        import json
-        import logging
-        import os
-        
-        logger = logging.getLogger(__name__)
-        
-        # Base directory for JSON files - use current working directory or fallback to /tmp
-        try:
-            # Get the current working directory
-            cwd = os.getcwd()
-            json_dir = os.path.join(cwd, 'energy_data')
-            # Create directory with proper permissions
-            os.makedirs(json_dir, exist_ok=True)
-            # Ensure the directory has the right permissions
-            os.chmod(json_dir, 0o777)  # rwx for all users
-            logger.info(f"Created energy data directory: {json_dir}")
-        except Exception as e:
-            logger.error(f"Error creating energy data directory: {e}")
-            # Fallback to /tmp directory which should be writable
-            json_dir = os.path.join("/tmp", 'lithops_energy_data')
-            os.makedirs(json_dir, exist_ok=True)
-            logger.info(f"Using fallback energy data directory: {json_dir}")
-        
-        timestamp = time.time()
-        
-        try:
-            # Create a unique ID for this execution
-            execution_id = f"{task.job_key}_{task.call_id}"
-            
-            # Calculate additional metrics
-            duration = energy_data['duration']
-            energy_efficiency = pkg_energy / max(duration, 0.001)  # Watts
-            
-            # Calculate average CPU usage
-            avg_cpu_usage = sum(cpu_info['usage']) / len(cpu_info['usage']) if cpu_info['usage'] else 0
-            
-            # Calculate energy per CPU usage
-            energy_per_cpu = pkg_energy / max(avg_cpu_usage, 0.01)  # Joules per % CPU
-            
-            # Main energy consumption data
-            energy_consumption = {
-                'job_key': task.job_key,
-                'call_id': task.call_id,
-                'timestamp': timestamp,
-                'energy_pkg': pkg_energy,
-                'energy_cores': cores_energy,
-                'core_percentage': core_percentage,
-                'duration': energy_data['duration'],
-                'source': energy_data.get('source', 'unknown'),
-                'function_name': function_name,
-                # Additional metrics
-                'energy_efficiency': energy_efficiency,  # Watts
-                'avg_cpu_usage': avg_cpu_usage,  # %
-                'energy_per_cpu': energy_per_cpu,  # Joules per % CPU
-                'cpu_count': len(cpu_info['usage']),  # Number of CPU cores
-                'active_cpus': sum(1 for cpu in cpu_info['usage'] if cpu > 5),  # Number of active CPU cores (>5%)
-                'max_cpu_usage': max(cpu_info['usage']) if cpu_info['usage'] else 0,  # Maximum CPU usage
-                'system_time': cpu_info.get('system', 0),  # System CPU time
-                'user_time': cpu_info.get('user', 0)  # User CPU time
-            }
-            
-            # CPU usage data
-            cpu_usage = []
-            
-            # Get start timestamp and end timestamps from cpu_info if available
-            start_timestamp = cpu_info.get('start_timestamp', timestamp)
-            end_timestamps = cpu_info.get('end_timestamps', [])
-            
-            # If end_timestamps is not available or empty, use the current timestamp for all cores
-            if not end_timestamps:
-                end_timestamps = [timestamp] * len(cpu_info['usage'])
-            
-            # Create CPU usage entries with both start and end timestamps
-            for cpu_id, cpu_percent in enumerate(cpu_info['usage']):
-                # Get the end timestamp for this CPU core
-                end_timestamp = end_timestamps[cpu_id] if cpu_id < len(end_timestamps) else timestamp
-                
-                cpu_usage.append({
-                    'cpu_id': cpu_id,
-                    'cpu_percent': cpu_percent,
-                    'start_timestamp': start_timestamp,
-                    'end_timestamp': end_timestamp
-                })
-            
-            # Combine all data into one object (without cpu_times and formatted_output)
-            all_data = {
-                'energy_consumption': energy_consumption,
-                'cpu_usage': cpu_usage
-            }
-            
-            # Write to a single JSON file
-            json_file = os.path.join(json_dir, f"{execution_id}.json")
-            with open(json_file, 'w') as f:
-                json.dump(all_data, f, indent=2)
-            
-            logger.info(f"Energy data stored in JSON file: {json_file}")
-            
-            # Also write a summary file that contains all execution IDs
-            summary_file = os.path.join(json_dir, 'summary.json')
-            summary = []
-            
-            if os.path.exists(summary_file):
-                try:
-                    with open(summary_file, 'r') as f:
-                        summary = json.load(f)
-                except Exception as e:
-                    logger.error(f"Error reading summary file: {e}")
-                    summary = []
-            
-            summary.append({
-                'execution_id': execution_id,
-                'function_name': function_name,
-                'timestamp': timestamp,
-                'energy_pkg': pkg_energy,
-                'energy_cores': cores_energy,
-                'core_percentage': core_percentage,
-                'energy_efficiency': energy_efficiency,
-                'avg_cpu_usage': avg_cpu_usage,
-                'energy_per_cpu': energy_per_cpu
-            })
-            
-            with open(summary_file, 'w') as f:
-                json.dump(summary, f, indent=2)
-            
-        except Exception as e:
-            logger.error(f"Error writing energy data to JSON file: {e}")
-            # Fallback to simple text file in /tmp directory if JSON fails
-            energy_file = os.path.join("/tmp", f'lithops_energy_consumption_{task.job_key}_{task.call_id}.txt')
-            # Ensure the directory exists
-            os.makedirs(os.path.dirname(energy_file), exist_ok=True)
-            with open(energy_file, 'w') as f:
-                f.write("Performance counter stats for 'system wide':\n\n")
-                f.write(f"          {pkg_energy:.2f} Joules power/energy-pkg/\n")
-                f.write(f"          {cores_energy:.2f} Joules power/energy-cores/\n")
-                f.write(f"          {core_percentage * 100:.2f}% core percentage (cores/pkg)\n")
-            logger.info(f"Energy data stored in fallback file: {energy_file}")
-            
     def update_function_name(self, task, function_name):
         """Update the function name in the JSON files."""
-        import json
-        import logging
-        import os
-        
-        logger = logging.getLogger(__name__)
-        
         # Store function name
         self.function_name = function_name
         
-        try:
-            # Get the current working directory
-            cwd = os.getcwd()
-            json_dir = os.path.join(cwd, 'energy_data')
-            json_file = os.path.join(json_dir, f"{task.job_key}_{task.call_id}.json")
-            
-            if os.path.exists(json_file):
-                with open(json_file, 'r') as f:
-                    data = json.load(f)
-                
-                # Update function name
-                if 'energy_consumption' in data:
-                    data['energy_consumption']['function_name'] = function_name
-                
-                # Write updated data back to file
-                with open(json_file, 'w') as f:
-                    json.dump(data, f, indent=2)
-                
-                logger.info(f"Updated function name in JSON file: {function_name}")
-                
-                # Also update the summary file
-                summary_file = os.path.join(json_dir, 'summary.json')
-                if os.path.exists(summary_file):
-                    with open(summary_file, 'r') as f:
-                        summary = json.load(f)
-                    
-                    for entry in summary:
-                        if entry.get('execution_id') == f"{task.job_key}_{task.call_id}":
-                            entry['function_name'] = function_name
-                    
-                    with open(summary_file, 'w') as f:
-                        json.dump(summary, f, indent=2)
-            else:
-                logger.warning(f"JSON file not found for updating function name: {json_file}")
-        except Exception as e:
-            logger.error(f"Error updating function name in JSON file: {e}")
+        # Use shared utility function
+        update_function_name(task, function_name)
             
     def read_function_name_from_stats(self, stats_file):
         """Read function name from stats file and update it in the energy monitor."""

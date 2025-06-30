@@ -17,8 +17,8 @@
 
 import os
 import logging
-from lithops.worker.energymonitor import EnergyMonitor
-from lithops.worker.ebpf_energy_monitor import EBPFEnergyMonitor
+from lithops.worker.energymonitor_rapl import EnergyMonitor
+from lithops.worker.energymonitor_ebpf import EBPFEnergyMonitor
 
 logger = logging.getLogger(__name__)
 
@@ -107,6 +107,7 @@ class EnergyManager:
             # Add duration and source
             call_status.add('worker_func_energy_duration', ebpf_energy_data['duration'])
             call_status.add('worker_func_energy_source', ebpf_energy_data.get('source', 'ebpf'))
+            call_status.add('worker_func_energy_method_used', 'ebpf')
             
             # Add energy metrics
             if ebpf_energy_data['energy']:
@@ -126,12 +127,25 @@ class EnergyManager:
             self.ebpf_energy_monitor.log_energy_data(ebpf_energy_data, task, cpu_info, self.function_name)
         
         if self.energy_monitor_started:
-            # Get perf energy data
+            # Get RAPL energy data
             energy_data = self.energy_monitor.get_energy_data()
             
             # Add duration and source
             call_status.add('worker_func_energy_duration', energy_data['duration'])
             call_status.add('worker_func_energy_source', energy_data.get('source', 'unknown'))
+            
+            # Add method used based on the source
+            source = energy_data.get('source', 'unknown')
+            if source == 'perf':
+                call_status.add('worker_func_energy_method_used', 'perf')
+            elif source == 'rapl_direct':
+                call_status.add('worker_func_energy_method_used', 'rapl')
+            elif source == 'cpu_estimate':
+                call_status.add('worker_func_energy_method_used', 'cpu_estimation')
+            elif source == 'duration_estimate':
+                call_status.add('worker_func_energy_method_used', 'duration_estimation')
+            else:
+                call_status.add('worker_func_energy_method_used', 'unknown')
             
             # Add energy metrics
             if energy_data['energy']:

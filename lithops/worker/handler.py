@@ -43,7 +43,7 @@ from lithops.constants import JOBS_PREFIX, LITHOPS_TEMP_DIR, MODULES_DIR
 from lithops.utils import setup_lithops_logger, is_unix_system
 from lithops.worker.status import create_call_status
 from lithops.worker.utils import SystemMonitor
-from lithops.worker.energy_manager import EnergyManager
+from lithops.worker.energymanager import EnergyManager
 from lithops.worker.processor_info import add_processor_info_to_task
 
 pickling_support.install()

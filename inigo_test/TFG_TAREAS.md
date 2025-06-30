@@ -843,7 +843,7 @@ i mean with a brief description
 
 first one secuential sumary 
 
-general_test_map_reduce.py  > lithops/executors.py  >  ... > handler.py > energy_manager > energy monitor
+general_test_map_reduce.py  > lithops/executors.py  >  ... > handler.py > energymanager > energy monitor
 
 And then i want a bit of explanation of the project where you briefly explain wich desing pattern is being used and how critical is its performance in the thread workers
 
