@@ -17,63 +17,103 @@
 
 import os
 import logging
-from lithops.worker.energymonitor_rapl import EnergyMonitor
-from lithops.worker.energymonitor_ebpf import EBPFEnergyMonitor
 
 logger = logging.getLogger(__name__)
 
 class EnergyManager:
     """
-    Manager class for energy monitoring.
-    Handles both eBPF and regular energy monitors.
+    Unified energy manager that runs all available energy monitoring methods simultaneously.
+    Collects data from all methods and stores them as separate fields in the result.
     """
     
-    def __init__(self, process_id, run_both_monitors=False):
+    def __init__(self, process_id):
         """
-        Initialize the energy manager.
+        Initialize the energy manager with all available monitoring methods.
         
         Args:
             process_id: The process ID to monitor
-            run_both_monitors: Whether to run both eBPF and regular energy monitors
         """
         self.process_id = process_id
-        self.run_both_monitors = run_both_monitors
-        self.energy_monitor = EnergyMonitor(process_id)
-        self.ebpf_energy_monitor = EBPFEnergyMonitor(process_id)
-        self.energy_monitor_started = False
-        self.ebpf_energy_monitor_started = False
         self.function_name = None
+        
+        # Initialize all energy monitors
+        self.monitors = {}
+        self.monitor_status = {}
+        
+        # Initialize each monitoring method
+        self._initialize_monitors()
+        
+    def _initialize_monitors(self):
+        """Initialize all available energy monitoring methods."""
+        monitor_configs = {
+            'perf': {
+                'class': 'EnergyMonitor',
+                'module': 'lithops.worker.energymonitor_perf'
+            },
+            'rapl': {
+                'class': 'EnergyMonitor', 
+                'module': 'lithops.worker.energymonitor_rapl'
+            },
+            'ebpf': {
+                'class': 'EBPFEnergyMonitor',
+                'module': 'lithops.worker.energymonitor_ebpf'
+            },
+            'base': {
+                'class': 'EnergyMonitor',
+                'module': 'lithops.worker.energymonitor_base'
+            }
+        }
+        
+        for method_name, config in monitor_configs.items():
+            try:
+                # Dynamically import the module
+                module = __import__(config['module'], fromlist=[config['class']])
+                monitor_class = getattr(module, config['class'])
+                
+                # Initialize the monitor
+                monitor = monitor_class(self.process_id)
+                self.monitors[method_name] = monitor
+                self.monitor_status[method_name] = False
+                
+                logger.debug(f"Initialized {method_name} energy monitor")
+                
+            except Exception as e:
+                logger.warning(f"Failed to initialize {method_name} energy monitor: {e}")
+                self.monitors[method_name] = None
+                self.monitor_status[method_name] = False
     
     def start(self):
-        """Start energy monitoring."""
-        # Try to start eBPF energy monitor first
-        self.ebpf_energy_monitor_started = self.ebpf_energy_monitor.start()
+        """Start all available energy monitoring methods."""
+        any_started = False
         
-        # Determine if we should also start the regular energy monitor
-        if self.run_both_monitors:
-            # Start both monitors regardless of eBPF success
-            self.energy_monitor_started = self.energy_monitor.start()
-            if self.ebpf_energy_monitor_started:
-                logger.info("Running both eBPF and regular energy monitors")
+        for method_name, monitor in self.monitors.items():
+            if monitor is not None:
+                try:
+                    started = monitor.start()
+                    self.monitor_status[method_name] = started
+                    if started:
+                        logger.info(f"Started {method_name} energy monitor")
+                        any_started = True
+                    else:
+                        logger.warning(f"Failed to start {method_name} energy monitor")
+                except Exception as e:
+                    logger.error(f"Error starting {method_name} energy monitor: {e}")
+                    self.monitor_status[method_name] = False
             else:
-                logger.info("eBPF energy monitor failed to start, running only regular energy monitor")
-        else:
-            # Fall back to regular monitor only if eBPF fails
-            if not self.ebpf_energy_monitor_started:
-                logger.info("eBPF energy monitor failed to start, falling back to regular energy monitor")
-                self.energy_monitor_started = self.energy_monitor.start()
-            else:
-                logger.info("eBPF energy monitor started successfully")
-                self.energy_monitor_started = False
+                self.monitor_status[method_name] = False
         
-        return self.energy_monitor_started or self.ebpf_energy_monitor_started
+        logger.info(f"Energy monitoring started. Active monitors: {[m for m, s in self.monitor_status.items() if s]}")
+        return any_started
     
     def stop(self):
-        """Stop energy monitoring."""
-        if self.ebpf_energy_monitor_started:
-            self.ebpf_energy_monitor.stop()
-        if self.energy_monitor_started:
-            self.energy_monitor.stop()
+        """Stop all active energy monitoring methods."""
+        for method_name, monitor in self.monitors.items():
+            if monitor is not None and self.monitor_status[method_name]:
+                try:
+                    monitor.stop()
+                    logger.debug(f"Stopped {method_name} energy monitor")
+                except Exception as e:
+                    logger.error(f"Error stopping {method_name} energy monitor: {e}")
     
     def read_function_name_from_stats(self, stats_file):
         """Read function name from stats file."""
@@ -97,72 +137,275 @@ class EnergyManager:
         
         return None
     
-    def process_energy_data(self, task, call_status, cpu_info):
-        """Process energy data and add it to call status."""
-        # Add energy monitoring data
-        if self.ebpf_energy_monitor_started:
-            # Get eBPF energy data
-            ebpf_energy_data = self.ebpf_energy_monitor.get_energy_data()
-            
-            # Add duration and source
-            call_status.add('worker_func_energy_duration', ebpf_energy_data['duration'])
-            call_status.add('worker_func_energy_source', ebpf_energy_data.get('source', 'ebpf'))
-            call_status.add('worker_func_energy_method_used', 'ebpf')
-            
-            # Add energy metrics
-            if ebpf_energy_data['energy']:
-                # Add individual energy metrics
-                for metric, value in ebpf_energy_data['energy'].items():
-                    call_status.add(f'worker_func_energy_{metric}', value)
-                
-                # Add energy metrics for pkg and cores
-                call_status.add('worker_func_perf_energy_pkg', ebpf_energy_data['energy']['pkg'])
-                call_status.add('worker_func_perf_energy_cores', ebpf_energy_data['energy']['cores'])
-                
-                # Add eBPF-specific metrics
-                call_status.add('worker_func_ebpf_cpu_cycles', ebpf_energy_data['energy']['cpu_cycles'])
-                call_status.add('worker_func_ebpf_energy_from_cycles', ebpf_energy_data['energy']['energy_from_cycles'])
-            
-            # Log energy data and store it in JSON format
-            self.ebpf_energy_monitor.log_energy_data(ebpf_energy_data, task, cpu_info, self.function_name)
+    def _collect_cpu_information(self):
+        """Collect CPU information from within the energy manager."""
+        import platform
+        import psutil
         
-        if self.energy_monitor_started:
-            # Get RAPL energy data
-            energy_data = self.energy_monitor.get_energy_data()
+        cpu_data = {
+            'cpu_name': 'Unknown',
+            'cpu_brand': 'Unknown', 
+            'cpu_architecture': 'Unknown',
+            'cpu_cores_physical': 0,
+            'cpu_cores_logical': 0,
+            'cpu_frequency': 0.0
+        }
+        
+        try:
+            # Get basic architecture
+            cpu_data['cpu_architecture'] = platform.machine()
             
-            # Add duration and source
-            call_status.add('worker_func_energy_duration', energy_data['duration'])
-            call_status.add('worker_func_energy_source', energy_data.get('source', 'unknown'))
+            # Get core counts
+            cpu_data['cpu_cores_physical'] = psutil.cpu_count(logical=False) or 0
+            cpu_data['cpu_cores_logical'] = psutil.cpu_count(logical=True) or 0
             
-            # Add method used based on the source
-            source = energy_data.get('source', 'unknown')
-            if source == 'perf':
-                call_status.add('worker_func_energy_method_used', 'perf')
-            elif source == 'rapl_direct':
-                call_status.add('worker_func_energy_method_used', 'rapl')
-            elif source == 'cpu_estimate':
-                call_status.add('worker_func_energy_method_used', 'cpu_estimation')
-            elif source == 'duration_estimate':
-                call_status.add('worker_func_energy_method_used', 'duration_estimation')
-            else:
-                call_status.add('worker_func_energy_method_used', 'unknown')
+            # Get CPU frequency
+            try:
+                freq_info = psutil.cpu_freq()
+                if freq_info:
+                    cpu_data['cpu_frequency'] = freq_info.current
+            except:
+                pass
             
-            # Add energy metrics
-            if energy_data['energy']:
-                # Add individual energy metrics
-                for metric, value in energy_data['energy'].items():
-                    call_status.add(f'worker_func_energy_{metric}', value)
-                
-                # Add energy metrics for pkg and cores
-                call_status.add('worker_func_perf_energy_pkg', energy_data['energy']['pkg'])
-                call_status.add('worker_func_perf_energy_cores', energy_data['energy']['cores'])
+            # Platform-specific CPU name detection
+            if platform.system() == "Darwin":  # macOS
+                try:
+                    import subprocess
+                    output = subprocess.check_output(["sysctl", "-n", "machdep.cpu.brand_string"]).decode().strip()
+                    cpu_data['cpu_name'] = output
+                    
+                    # Determine brand
+                    if "intel" in output.lower():
+                        cpu_data['cpu_brand'] = "Intel"
+                    elif "amd" in output.lower():
+                        cpu_data['cpu_brand'] = "AMD"
+                    elif "apple" in output.lower():
+                        cpu_data['cpu_brand'] = "Apple"
+                    else:
+                        # Extract first word as brand
+                        first_word = output.split()[0] if output else 'Unknown'
+                        cpu_data['cpu_brand'] = first_word
+                        
+                except Exception as e:
+                    logger.debug(f"Error getting macOS CPU info: {e}")
+                    
+            elif platform.system() == "Linux":
+                try:
+                    with open('/proc/cpuinfo', 'r') as f:
+                        cpuinfo = f.read()
+                        
+                        # Extract model name
+                        import re
+                        model_match = re.search(r'model name\s+:\s+(.*)', cpuinfo)
+                        if model_match:
+                            cpu_data['cpu_name'] = model_match.group(1).strip()
+                            
+                            # Determine brand
+                            if "intel" in cpu_data['cpu_name'].lower():
+                                cpu_data['cpu_brand'] = "Intel"
+                            elif "amd" in cpu_data['cpu_name'].lower():
+                                cpu_data['cpu_brand'] = "AMD"
+                            elif "arm" in cpu_data['cpu_name'].lower():
+                                cpu_data['cpu_brand'] = "ARM"
+                            else:
+                                # Extract first word as brand
+                                first_word = cpu_data['cpu_name'].split()[0] if cpu_data['cpu_name'] else 'Unknown'
+                                cpu_data['cpu_brand'] = first_word
+                                
+                except Exception as e:
+                    logger.debug(f"Error getting Linux CPU info: {e}")
+                    
+            elif platform.system() == "Windows":
+                try:
+                    import subprocess
+                    output = subprocess.check_output("wmic cpu get name", shell=True).decode()
+                    lines = output.strip().split('\n')
+                    if len(lines) >= 2:
+                        cpu_data['cpu_name'] = lines[1].strip()
+                        
+                        # Determine brand
+                        if "intel" in cpu_data['cpu_name'].lower():
+                            cpu_data['cpu_brand'] = "Intel"
+                        elif "amd" in cpu_data['cpu_name'].lower():
+                            cpu_data['cpu_brand'] = "AMD"
+                        else:
+                            first_word = cpu_data['cpu_name'].split()[0] if cpu_data['cpu_name'] else 'Unknown'
+                            cpu_data['cpu_brand'] = first_word
+                            
+                except Exception as e:
+                    logger.debug(f"Error getting Windows CPU info: {e}")
             
-            # Log energy data and store it in JSON format
-            self.energy_monitor.log_energy_data(energy_data, task, cpu_info, self.function_name)
+            # Fallback to platform.processor() if name is still unknown
+            if cpu_data['cpu_name'] == 'Unknown':
+                try:
+                    cpu_data['cpu_name'] = platform.processor() or 'Unknown'
+                except:
+                    pass
+                    
+        except Exception as e:
+            logger.error(f"Error collecting CPU information: {e}")
+        
+        return cpu_data
+    
+    def process_energy_data(self, task, call_status, cpu_info):
+        """Process energy data from all monitors and add to call status."""
+        
+        # Initialize all energy fields to 0
+        energy_fields = {
+            # Duration and overall metrics
+            'worker_func_energy_duration': 0.0,
+            
+            # PERF metrics
+            'worker_func_perf_energy_pkg': 0.0,
+            'worker_func_perf_energy_cores': 0.0,
+            'worker_func_perf_energy_total': 0.0,
+            'worker_func_perf_source': 'unavailable',
+            'worker_func_perf_available': False,
+            
+            # RAPL metrics
+            'worker_func_rapl_energy_pkg': 0.0,
+            'worker_func_rapl_energy_cores': 0.0,
+            'worker_func_rapl_energy_total': 0.0,
+            'worker_func_rapl_source': 'unavailable',
+            'worker_func_rapl_available': False,
+            
+            # eBPF metrics
+            'worker_func_ebpf_energy_pkg': 0.0,
+            'worker_func_ebpf_energy_cores': 0.0,
+            'worker_func_ebpf_energy_total': 0.0,
+            'worker_func_ebpf_cpu_cycles': 0.0,
+            'worker_func_ebpf_energy_from_cycles': 0.0,
+            'worker_func_ebpf_source': 'unavailable',
+            'worker_func_ebpf_available': False,
+            
+            # Base/PSUtil system monitoring metrics (no energy, but system resource monitoring)
+            'worker_func_base_cpu_percent': 0.0,
+            'worker_func_base_memory_percent': 0.0,
+            'worker_func_base_memory_used_mb': 0.0,
+            'worker_func_base_disk_io_read_mb': 0.0,
+            'worker_func_base_disk_io_write_mb': 0.0,
+            'worker_func_base_network_sent_mb': 0.0,
+            'worker_func_base_network_recv_mb': 0.0,
+            'worker_func_base_process_cpu_percent': 0.0,
+            'worker_func_base_process_memory_mb': 0.0,
+            'worker_func_base_cpu_freq_current': 0.0,
+            'worker_func_base_cpu_temp_celsius': 0.0,
+            'worker_func_base_source': 'unavailable',
+            'worker_func_base_available': False,
+            
+            # CPU Information from EnergyManager
+            'worker_func_cpu_name': 'Unknown',
+            'worker_func_cpu_brand': 'Unknown',
+            'worker_func_cpu_architecture': 'Unknown',
+            'worker_func_cpu_cores_physical': 0,
+            'worker_func_cpu_cores_logical': 0,
+            'worker_func_cpu_frequency': 0.0,
+        }
+        
+        # Collect CPU information from within the energy manager
+        try:
+            cpu_data = self._collect_cpu_information()
+            energy_fields['worker_func_cpu_name'] = cpu_data['cpu_name']
+            energy_fields['worker_func_cpu_brand'] = cpu_data['cpu_brand']
+            energy_fields['worker_func_cpu_architecture'] = cpu_data['cpu_architecture']
+            energy_fields['worker_func_cpu_cores_physical'] = cpu_data['cpu_cores_physical']
+            energy_fields['worker_func_cpu_cores_logical'] = cpu_data['cpu_cores_logical']
+            energy_fields['worker_func_cpu_frequency'] = cpu_data['cpu_frequency']
+            logger.info(f"Collected CPU info in EnergyManager: {cpu_data['cpu_name']} ({cpu_data['cpu_brand']})")
+        except Exception as e:
+            logger.error(f"Error collecting CPU information in EnergyManager: {e}")
+        
+        # Process data from each monitor
+        max_duration = 0.0
+        
+        for method_name, monitor in self.monitors.items():
+            if monitor is not None and self.monitor_status.get(method_name, False):
+                try:
+                    energy_data = monitor.get_energy_data()
+                    
+                    # Update maximum duration
+                    duration = energy_data.get('duration', 0.0)
+                    max_duration = max(max_duration, duration)
+                    
+                    # Extract energy values
+                    energy = energy_data.get('energy', {})
+                    pkg_energy = energy.get('pkg', 0.0)
+                    cores_energy = energy.get('cores', 0.0)
+                    total_energy = pkg_energy + cores_energy if pkg_energy > 0 or cores_energy > 0 else 0.0
+                    
+                    source = energy_data.get('source', 'unknown')
+                    
+                    # Store method-specific data
+                    if method_name == 'perf':
+                        energy_fields['worker_func_perf_energy_pkg'] = pkg_energy
+                        energy_fields['worker_func_perf_energy_cores'] = cores_energy
+                        energy_fields['worker_func_perf_energy_total'] = total_energy
+                        energy_fields['worker_func_perf_source'] = source
+                        energy_fields['worker_func_perf_available'] = True
+                        
+                    elif method_name == 'rapl':
+                        energy_fields['worker_func_rapl_energy_pkg'] = pkg_energy
+                        energy_fields['worker_func_rapl_energy_cores'] = cores_energy
+                        energy_fields['worker_func_rapl_energy_total'] = total_energy
+                        energy_fields['worker_func_rapl_source'] = source
+                        energy_fields['worker_func_rapl_available'] = True
+                        
+                    elif method_name == 'ebpf':
+                        energy_fields['worker_func_ebpf_energy_pkg'] = pkg_energy
+                        energy_fields['worker_func_ebpf_energy_cores'] = cores_energy
+                        energy_fields['worker_func_ebpf_energy_total'] = total_energy
+                        energy_fields['worker_func_ebpf_cpu_cycles'] = energy.get('cpu_cycles', 0.0)
+                        energy_fields['worker_func_ebpf_energy_from_cycles'] = energy.get('energy_from_cycles', 0.0)
+                        energy_fields['worker_func_ebpf_source'] = source
+                        energy_fields['worker_func_ebpf_available'] = True
+                        
+                    elif method_name == 'base':
+                        # PSUtil provides system resource monitoring, not energy
+                        system_data = energy_data.get('system', {})
+                        process_data = energy_data.get('process', {})
+                        
+                        energy_fields['worker_func_base_cpu_percent'] = system_data.get('cpu_percent', 0.0)
+                        energy_fields['worker_func_base_memory_percent'] = system_data.get('memory_percent', 0.0)
+                        energy_fields['worker_func_base_memory_used_mb'] = system_data.get('memory_used_mb', 0.0)
+                        energy_fields['worker_func_base_disk_io_read_mb'] = system_data.get('disk_io_read_mb', 0.0)
+                        energy_fields['worker_func_base_disk_io_write_mb'] = system_data.get('disk_io_write_mb', 0.0)
+                        energy_fields['worker_func_base_network_sent_mb'] = system_data.get('network_sent_mb', 0.0)
+                        energy_fields['worker_func_base_network_recv_mb'] = system_data.get('network_recv_mb', 0.0)
+                        energy_fields['worker_func_base_process_cpu_percent'] = process_data.get('cpu_percent', 0.0)
+                        energy_fields['worker_func_base_process_memory_mb'] = process_data.get('memory_mb', 0.0)
+                        energy_fields['worker_func_base_cpu_freq_current'] = system_data.get('cpu_freq_current', 0.0)
+                        energy_fields['worker_func_base_cpu_temp_celsius'] = system_data.get('cpu_temp_celsius', 0.0)
+                        energy_fields['worker_func_base_source'] = source
+                        energy_fields['worker_func_base_available'] = True
+                    
+                    # Log energy data for each method
+                    try:
+                        monitor.log_energy_data(energy_data, task, cpu_info, self.function_name)
+                    except Exception as log_e:
+                        logger.warning(f"Failed to log energy data for {method_name}: {log_e}")
+                        
+                except Exception as e:
+                    logger.error(f"Error processing energy data from {method_name}: {e}")
+        
+        # Set the overall duration to the maximum from all monitors
+        energy_fields['worker_func_energy_duration'] = max_duration
+        
+        # Add all energy fields to call status
+        for field_name, field_value in energy_fields.items():
+            call_status.add(field_name, field_value)
+        
+        # Log summary of collected data
+        active_methods = [m for m, s in self.monitor_status.items() if s and self.monitors[m] is not None]
+        logger.info(f"Energy data collected from {len(active_methods)} methods: {active_methods}")
+        
+        # Log non-zero energy values for debugging
+        non_zero_fields = {k: v for k, v in energy_fields.items() if isinstance(v, (int, float)) and v > 0}
+        if non_zero_fields:
+            logger.debug(f"Non-zero energy values: {non_zero_fields}")
     
     def update_function_name(self, task, cpu_info, stats_file):
-        """Update function name in energy data if available."""
-        if not (self.ebpf_energy_monitor_started or self.energy_monitor_started):
+        """Update function name in energy data for all monitors if available."""
+        if not any(self.monitor_status.values()):
             return
             
         if not os.path.exists(stats_file):
@@ -176,14 +419,19 @@ class EnergyManager:
             
         logger.info(f"Updating function name in energy data: {function_name}")
         
-        # Update function name in energy monitors
-        if self.ebpf_energy_monitor_started:
-            self.ebpf_energy_monitor._store_energy_data_json(
-                self.ebpf_energy_monitor.get_energy_data(), 
-                task, 
-                cpu_info, 
-                function_name
-            )
-        
-        if self.energy_monitor_started:
-            self.energy_monitor.update_function_name(task, function_name)
+        # Update function name in all active monitors
+        for method_name, monitor in self.monitors.items():
+            if monitor is not None and self.monitor_status.get(method_name, False):
+                try:
+                    if hasattr(monitor, 'update_function_name'):
+                        monitor.update_function_name(task, function_name)
+                    elif hasattr(monitor, '_store_energy_data_json'):
+                        # For eBPF monitor specifically
+                        monitor._store_energy_data_json(
+                            monitor.get_energy_data(), 
+                            task, 
+                            cpu_info, 
+                            function_name
+                        )
+                except Exception as e:
+                    logger.warning(f"Failed to update function name for {method_name}: {e}")

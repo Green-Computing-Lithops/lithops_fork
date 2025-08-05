@@ -50,9 +50,7 @@ pickling_support.install()
 
 logger = logging.getLogger(__name__)
 
-# Flag to control whether to run both energy monitors at once
-# Set to True to run both eBPF and regular energy monitors simultaneously
-RUN_BOTH_ENERGY_MONITORS = False
+# Energy monitoring is now unified - all available methods run simultaneously
 
 
 class ShutdownSentinel:
@@ -221,7 +219,7 @@ def run_task(task):
         
         ##~~ENERGY~~##
         # Initialize energy manager
-        energy_manager = EnergyManager(process_id, RUN_BOTH_ENERGY_MONITORS)
+        energy_manager = EnergyManager(process_id)
         
         # Read function name from stats file if it exists
         energy_manager.read_function_name_from_stats(task.stats_file)

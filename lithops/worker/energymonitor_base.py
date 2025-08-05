@@ -322,52 +322,140 @@ class EnergyMonitor:
             print(f"Error stopping energy monitoring: {e}")
             
     def get_energy_data(self):
-        """Get the collected energy data for energy-pkg and energy-cores."""
-        print("\n==== GETTING ENERGY DATA ====")
+        """Get comprehensive system monitoring data using PSUtil (not energy measurement)."""
+        print("\n==== GETTING SYSTEM MONITORING DATA (PSUtil) ====")
         duration = self.end_time - self.start_time if self.end_time and self.start_time else 0
         print(f"Duration: {duration:.2f} seconds")
         
-        # Create the base result dictionary
+        # Create the result dictionary focused on system monitoring
         result = {
-            'energy': {},
             'duration': duration,
-            'source': 'perf'
+            'source': 'psutil_system_monitoring',
+            'system': {},
+            'process': {}
         }
         
-        # Add CPU percentage if available (for reference only, not for estimation)
-        if self.cpu_percent is not None:
-            print(f"Using CPU percentage: {self.cpu_percent * 100:.2f}%")
-            result['cpu_percent'] = self.cpu_percent
-        
-        # Add energy values if available from perf
-        if self.energy_pkg is not None and self.energy_pkg > 0:
-            print(f"Using measured energy-pkg: {self.energy_pkg:.2f} Joules")
-            result['energy']['pkg'] = self.energy_pkg
-        else:
-            print("No energy-pkg data from perf, setting to 0")
-            result['energy']['pkg'] = 0
+        try:
+            import psutil
             
-        if self.energy_cores is not None and self.energy_cores > 0:
-            print(f"Using measured energy-cores: {self.energy_cores:.2f} Joules")
-            result['energy']['cores'] = self.energy_cores
-        else:
-            print("No energy-cores data from perf, setting to 0")
-            result['energy']['cores'] = 0
+            # === SYSTEM-WIDE METRICS ===
+            # CPU metrics
+            try:
+                cpu_percent = psutil.cpu_percent(interval=0.1)
+                result['system']['cpu_percent'] = cpu_percent
+                print(f"System CPU usage: {cpu_percent:.2f}%")
+            except Exception as e:
+                print(f"Error getting system CPU: {e}")
+                result['system']['cpu_percent'] = 0.0
             
-        # Calculate core percentage (energy_cores / energy_pkg)
-        if result['energy']['pkg'] > 0:
-            core_percentage = result['energy']['cores'] / result['energy']['pkg']
-            print(f"Core percentage: {core_percentage:.4f} ({core_percentage * 100:.2f}%)")
-            result['energy']['core_percentage'] = core_percentage
-        else:
-            print("Cannot calculate core percentage, energy_pkg is 0")
-            result['energy']['core_percentage'] = 0
+            # Memory metrics
+            try:
+                memory = psutil.virtual_memory()
+                result['system']['memory_percent'] = memory.percent
+                result['system']['memory_used_mb'] = memory.used / (1024 * 1024)
+                print(f"System Memory: {memory.percent:.2f}% ({memory.used / (1024 * 1024):.1f} MB used)")
+            except Exception as e:
+                print(f"Error getting memory info: {e}")
+                result['system']['memory_percent'] = 0.0
+                result['system']['memory_used_mb'] = 0.0
+            
+            # Disk I/O metrics (since start)
+            try:
+                disk_io = psutil.disk_io_counters()
+                if disk_io:
+                    # Convert bytes to MB
+                    result['system']['disk_io_read_mb'] = disk_io.read_bytes / (1024 * 1024)
+                    result['system']['disk_io_write_mb'] = disk_io.write_bytes / (1024 * 1024)
+                    print(f"Disk I/O: Read {disk_io.read_bytes / (1024 * 1024):.2f} MB, Write {disk_io.write_bytes / (1024 * 1024):.2f} MB")
+                else:
+                    result['system']['disk_io_read_mb'] = 0.0
+                    result['system']['disk_io_write_mb'] = 0.0
+            except Exception as e:
+                print(f"Error getting disk I/O: {e}")
+                result['system']['disk_io_read_mb'] = 0.0
+                result['system']['disk_io_write_mb'] = 0.0
+            
+            # Network I/O metrics (since start)
+            try:
+                net_io = psutil.net_io_counters()
+                if net_io:
+                    # Convert bytes to MB
+                    result['system']['network_sent_mb'] = net_io.bytes_sent / (1024 * 1024)
+                    result['system']['network_recv_mb'] = net_io.bytes_recv / (1024 * 1024)
+                    print(f"Network I/O: Sent {net_io.bytes_sent / (1024 * 1024):.2f} MB, Received {net_io.bytes_recv / (1024 * 1024):.2f} MB")
+                else:
+                    result['system']['network_sent_mb'] = 0.0
+                    result['system']['network_recv_mb'] = 0.0
+            except Exception as e:
+                print(f"Error getting network I/O: {e}")
+                result['system']['network_sent_mb'] = 0.0
+                result['system']['network_recv_mb'] = 0.0
+            
+            # CPU frequency
+            try:
+                cpu_freq = psutil.cpu_freq()
+                if cpu_freq:
+                    result['system']['cpu_freq_current'] = cpu_freq.current
+                    print(f"CPU Frequency: {cpu_freq.current:.0f} MHz")
+                else:
+                    result['system']['cpu_freq_current'] = 0.0
+            except Exception as e:
+                print(f"Error getting CPU frequency: {e}")
+                result['system']['cpu_freq_current'] = 0.0
+            
+            # CPU temperature (if available)
+            try:
+                temps = psutil.sensors_temperatures()
+                if temps:
+                    # Try to get CPU temperature from common sensor names
+                    cpu_temp = 0.0
+                    for name, entries in temps.items():
+                        if 'cpu' in name.lower() or 'core' in name.lower():
+                            if entries:
+                                cpu_temp = entries[0].current
+                                break
+                    result['system']['cpu_temp_celsius'] = cpu_temp
+                    if cpu_temp > 0:
+                        print(f"CPU Temperature: {cpu_temp:.1f}°C")
+                    else:
+                        print("CPU Temperature: Not available")
+                else:
+                    result['system']['cpu_temp_celsius'] = 0.0
+            except Exception as e:
+                print(f"Error getting CPU temperature: {e}")
+                result['system']['cpu_temp_celsius'] = 0.0
+            
+            # === PROCESS-SPECIFIC METRICS ===
+            try:
+                process = psutil.Process(self.process_id)
+                
+                # Process CPU usage
+                process_cpu = process.cpu_percent(interval=0.1)
+                result['process']['cpu_percent'] = process_cpu
+                print(f"Process CPU usage: {process_cpu:.2f}%")
+                
+                # Process memory usage
+                process_memory = process.memory_info()
+                result['process']['memory_mb'] = process_memory.rss / (1024 * 1024)
+                print(f"Process Memory: {process_memory.rss / (1024 * 1024):.1f} MB")
+                
+            except psutil.NoSuchProcess:
+                print(f"Process {self.process_id} no longer exists")
+                result['process']['cpu_percent'] = 0.0
+                result['process']['memory_mb'] = 0.0
+            except Exception as e:
+                print(f"Error getting process metrics: {e}")
+                result['process']['cpu_percent'] = 0.0
+                result['process']['memory_mb'] = 0.0
         
-        # If we have no energy data at all, set source to 'none'
-        if result['energy']['pkg'] == 0 and result['energy']['cores'] == 0:
-            result['source'] = 'none'
-
-        print(f"Final energy data: {result}")
+        except ImportError:
+            print("PSUtil not available")
+            result['source'] = 'unavailable'
+        except Exception as e:
+            print(f"Error collecting system metrics: {e}")
+            result['source'] = 'error'
+        
+        print(f"Final system monitoring data: {result}")
         return result
         
     def log_energy_data(self, energy_data, task, cpu_info, function_name=None):
