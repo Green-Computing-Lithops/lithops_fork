@@ -1,32 +1,12 @@
-import lithops
-from lithops.storage import Storage ## abstraccion de lithops para interactuar con el subyacente : interfaz comun independiente al storage
-
-import logging
-import os
-import time
-from datetime import datetime
-
-# Enable debug logging
-# logging.basicConfig(level=logging.DEBUG)
-# os.environ['LITHOPS_DEBUG'] = '1'
-
+#!/usr/bin/env python3
+"""
+Simulación directa de costes para tu función básica
+==================================================
+"""
 
 def calcular_coste_aws_lambda(num_invocaciones, memoria_mb=128, duracion_estimada_ms=1000, region='us-east-1'):
     """
     Calcula el coste estimado de ejecutar funciones Lambda en AWS
-    
-    Parámetros basados en AWS Lambda Pricing (Julio 2025):
-    - Request charges: $0.20 por 1M de requests
-    - Duration charges: $0.0000166667 por GB-segundo
-    
-    Args:
-        num_invocaciones (int): Número de invocaciones de la función
-        memoria_mb (int): Memoria asignada en MB (default: 128MB)
-        duracion_estimada_ms (int): Duración estimada por invocación en ms (default: 1000ms)
-        region (str): Región de AWS (default: us-east-1)
-    
-    Returns:
-        dict: Desglose de costes estimados
     """
     
     # Pricing de AWS Lambda (us-east-1) - Julio 2025
@@ -58,9 +38,6 @@ def calcular_coste_aws_lambda(num_invocaciones, memoria_mb=128, duracion_estimad
     coste_total = coste_requests + coste_compute
     
     # Estimar coste de S3 (storage y operaciones)
-    # PUT requests: $0.0005 per 1,000 requests
-    # GET requests: $0.0004 per 1,000 requests
-    # Storage: $0.023 per GB por mes (estimado para archivos pequeños)
     s3_put_requests = num_invocaciones  # 1 PUT por invocación
     s3_get_requests = num_invocaciones * 2  # 1 GET para list_keys + 1 GET para get_object
     
@@ -159,107 +136,133 @@ def mostrar_simulacion_costes(resultado):
     print("="*60 + "\n")
 
 
-def funcion_german ( x ): 
-    storage = Storage()
-    try:
-        # Use the same bucket as configured in lithops
-        bucket_name = "lithops-us-east-1-45dk"
-        
-        # Create a test object
-        test_key = f"test-execution/test-file-{x}.txt"
-        test_data = f"Hello from AWS Lambda task {x}"
-        storage.put_object(bucket_name, test_key, test_data)
-        print(f"Created test file in S3: {bucket_name}/{test_key}")
-        
-        # List objects in the test directory
-        keys = storage.list_keys(bucket_name, prefix="test-execution/")
-        print(f"Found keys in {bucket_name}: {keys}")
-        
-        # Read back the test object
-        result = storage.get_object(bucket_name, test_key)
-        print(f"Read back from S3: {result}")
-        
-    except Exception as e:
-        print(f"AWS S3 operation failed: {e}")
-        import traceback
-        traceback.print_exc()
-    return x + 1
-
-executor = lithops.FunctionExecutor(log_level='debug')
-
-# SIMULACIÓN DE COSTES ANTES DE LA EJECUCIÓN
-print("🧮 Realizando simulación de costes antes de la ejecución...")
-
-# Configuración para la simulación
-datos_entrada = [1, 2, 3]  # Los datos que vas a procesar
-num_invocaciones = len(datos_entrada)
-memoria_estimada_mb = 128  # Memoria por defecto de Lambda
-duracion_estimada_ms = 2000  # Duración estimada por función (incluyendo S3 ops)
-
-# Calcular costes estimados
-simulacion = calcular_coste_aws_lambda(
-    num_invocaciones=num_invocaciones,
-    memoria_mb=memoria_estimada_mb,
-    duracion_estimada_ms=duracion_estimada_ms,
-    region='us-east-1'
-)
-
-# Mostrar simulación
-mostrar_simulacion_costes(simulacion)
-
-# Preguntar al usuario si desea continuar
-respuesta = input("¿Deseas continuar con la ejecución? (s/n): ").lower().strip()
-
-if respuesta in ['s', 'si', 'sí', 'y', 'yes']:
-    print("\n🚀 Iniciando ejecución...")
+def simular_funcion_basica():
+    """
+    Simula exactamente tu función básica de main_german.py
+    """
+    print("🎯 SIMULACIÓN DE TU FUNCIÓN BÁSICA")
+    print("=" * 35)
+    print("Función: funcion_german(x)")
+    print("Operaciones:")
+    print("  • Crear Storage()")
+    print("  • PUT object en S3")
+    print("  • LIST keys en S3")  
+    print("  • GET object de S3")
+    print("  • Return x + 1")
+    print("Datos: [1, 2, 3] (3 invocaciones)\n")
     
-    # Registrar tiempo de inicio
-    tiempo_inicio = time.time()
-    inicio_timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    print(f"⏰ Inicio: {inicio_timestamp}")
+    # Configuración actual de tu función
+    num_invocaciones = 3  # [1, 2, 3]
+    memoria_mb = 128  # Default de Lambda
+    duracion_estimada_ms = 2000  # Estimación realista con operaciones S3
     
-    # Ejecutar las funciones
-    ft = executor.map(funcion_german, datos_entrada)
-    
-    # Obtener resultados
-    print("\n📋 Obteniendo resultados...")
-    resultados = executor.get_result(ft)
-    
-    # Calcular tiempo transcurrido
-    tiempo_fin = time.time()
-    fin_timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    duracion_real_segundos = tiempo_fin - tiempo_inicio
-    duracion_real_ms = duracion_real_segundos * 1000
-    
-    print(f"\n✅ EJECUCIÓN COMPLETADA")
-    print(f"⏰ Fin: {fin_timestamp}")
-    print(f"⏱️  Duración total: {duracion_real_segundos:.2f} segundos")
-    print(f"📊 Resultados: {resultados}")
-    
-    # Recalcular costes con duración real
-    print("\n🔄 Recalculando costes con duración real...")
-    simulacion_real = calcular_coste_aws_lambda(
+    resultado = calcular_coste_aws_lambda(
         num_invocaciones=num_invocaciones,
-        memoria_mb=memoria_estimada_mb,
-        duracion_estimada_ms=int(duracion_real_ms / len(datos_entrada)),  # Duración promedio por función
-        region='us-east-1'
+        memoria_mb=memoria_mb,
+        duracion_estimada_ms=duracion_estimada_ms
     )
     
-    print("\n📊 COMPARACIÓN ESTIMADO vs REAL:")
-    print(f"   • Duración estimada por función: {duracion_estimada_ms} ms")
-    print(f"   • Duración real promedio: {int(duracion_real_ms / len(datos_entrada))} ms")
-    print(f"   • Coste estimado: ${simulacion['total']['coste_total_usd']}")
-    print(f"   • Coste real: ${simulacion_real['total']['coste_total_usd']}")
+    mostrar_simulacion_costes(resultado)
     
-    diferencia = simulacion_real['total']['coste_total_usd'] - simulacion['total']['coste_total_usd']
-    if diferencia > 0:
-        print(f"   • Diferencia: +${diferencia:.6f} (más caro de lo estimado)")
-    elif diferencia < 0:
-        print(f"   • Diferencia: ${diferencia:.6f} (más barato de lo estimado)")
+    return resultado
+
+
+def comparar_escalas():
+    """
+    Compara costes para diferentes escalas de datos
+    """
+    print("📈 COMPARACIÓN POR ESCALAS")
+    print("=" * 30)
+    
+    escalas = [
+        {'datos': [1, 2, 3], 'descripcion': 'Tu función actual'},
+        {'datos': list(range(1, 11)), 'descripcion': '10 elementos'},
+        {'datos': list(range(1, 101)), 'descripcion': '100 elementos'},
+        {'datos': list(range(1, 1001)), 'descripcion': '1,000 elementos'},
+        {'datos': list(range(1, 10001)), 'descripcion': '10,000 elementos'}
+    ]
+    
+    print("Coste por escala:")
+    print("-" * 40)
+    
+    for escala in escalas:
+        num_invocaciones = len(escala['datos'])
+        resultado = calcular_coste_aws_lambda(
+            num_invocaciones=num_invocaciones,
+            memoria_mb=128,
+            duracion_estimada_ms=2000
+        )
+        
+        coste = resultado['total']['coste_total_usd']
+        print(f"   {escala['descripcion']:20s}: ${coste:8.6f}")
+
+
+def comparar_optimizaciones():
+    """
+    Compara diferentes optimizaciones posibles
+    """
+    print("\n🚀 OPTIMIZACIONES POSIBLES")
+    print("=" * 30)
+    
+    optimizaciones = [
+        {
+            'nombre': 'Actual (sin optimizar)',
+            'memoria': 128,
+            'duracion': 2000,
+            'descripcion': 'Tu configuración actual'
+        },
+        {
+            'nombre': 'Código optimizado',
+            'memoria': 128,
+            'duracion': 1000,
+            'descripcion': 'Mismo hardware, código más eficiente'
+        },
+        {
+            'nombre': 'Más memoria',
+            'memoria': 256,
+            'duracion': 1500,
+            'descripcion': 'Más memoria para mayor velocidad'
+        },
+        {
+            'nombre': 'Mucha más memoria',
+            'memoria': 512,
+            'duracion': 1000,
+            'descripcion': 'Memoria alta para máxima velocidad'
+        }
+    ]
+    
+    print("Comparación de optimizaciones (3 invocaciones):")
+    print("-" * 50)
+    
+    for opt in optimizaciones:
+        resultado = calcular_coste_aws_lambda(
+            num_invocaciones=3,
+            memoria_mb=opt['memoria'],
+            duracion_estimada_ms=opt['duracion']
+        )
+        
+        coste = resultado['total']['coste_total_usd']
+        print(f"   {opt['nombre']:20s}: ${coste:8.6f} - {opt['descripcion']}")
+
+
+if __name__ == "__main__":
+    # Simular tu función básica
+    resultado_basico = simular_funcion_basica()
+    
+    # Mostrar comparaciones
+    comparar_escalas()
+    comparar_optimizaciones()
+    
+    # Análisis final
+    print("\n🎯 ANÁLISIS PARA TU FUNCIÓN:")
+    print("=" * 30)
+    if resultado_basico['total']['coste_total_usd'] == 0:
+        print("✅ Tu función actual está completamente dentro del FREE TIER")
+        print("   Puedes ejecutarla miles de veces sin coste")
     else:
-        print(f"   • Diferencia: $0 (igual al estimado)")
-
-else:
-    print("\n❌ Ejecución cancelada por el usuario.")
-
- 
+        print(f"💰 Coste actual: ${resultado_basico['total']['coste_total_usd']}")
+    
+    print("\n💡 RECOMENDACIONES:")
+    print("   1. Para desarrollo/testing: ✅ Perfecto, coste mínimo")
+    print("   2. Para producción: Considera optimizar duración")
+    print("   3. Para escalabilidad: Monitorea cuando superes 1000+ invocaciones")

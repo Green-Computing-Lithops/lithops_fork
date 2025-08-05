@@ -1,0 +1,32 @@
+lithops:
+    backend: aws_lambda
+    storage: aws_s3
+
+aws:
+    # Configura tus credenciales AWS aquí o usa AWS CLI / variables de entorno
+    # access_key_id: YOUR_ACCESS_KEY_ID
+    # secret_access_key: YOUR_SECRET_ACCESS_KEY
+    region: us-east-1
+
+aws_lambda:
+    # Reemplaza con tu ARN de rol de ejecución
+    execution_role: arn:aws:iam::YOUR_ACCOUNT_ID:role/lithops-execution-role
+    
+    # Especifica tu runtime personalizado
+    runtime: lithops-costes-runtime:latest
+    
+    # Configuración de memoria y timeout
+    runtime_memory: 256
+    runtime_timeout: 300
+    
+    # Región donde desplegar
+    region: us-east-1
+
+aws_s3:
+    # Bucket para almacenamiento (debe existir)
+    bucket: lithops-us-east-1-45dk
+    region: us-east-1
+
+# Opcional: logging
+logging:
+    level: INFO

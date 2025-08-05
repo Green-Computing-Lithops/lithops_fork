@@ -18,6 +18,7 @@
 import os
 import json
 import time
+import sys
 import logging
 from typing import Dict, Any, Optional, List
 
@@ -40,10 +41,10 @@ def _get_default_energy_data_path():
         with open(test_file, 'w') as f:
             f.write("test")
         os.remove(test_file)
-        print(f"✅ Using target energy data path: {target_path}")
+        print(f"✅ Using target energy data path: {target_path}", file=sys.stderr)
         return target_path
     except Exception as e:
-        print(f"❌ Cannot write to target path {target_path}: {e}")
+        print(f"❌ Cannot write to target path {target_path}: {e}", file=sys.stderr)
     
     # If we're in a Kubernetes pod, try to create a path that might be accessible
     # Check if we're in a container/pod environment
@@ -66,9 +67,9 @@ def _get_default_energy_data_path():
                             
                             # Create a symlink or copy mechanism to the target
                             # Also create the JSON files in a way that can be copied out
-                            print(f"✅ Using container energy data path: {shared_path}")
-                            print(f"📋 Note: Files will be created in container at {shared_path}")
-                            print(f"📋 Target path for host access: {target_path}")
+                            print(f"✅ Using container energy data path: {shared_path}", file=sys.stderr)
+                            print(f"📋 Note: Files will be created in container at {shared_path}", file=sys.stderr)
+                            print(f"📋 Target path for host access: {target_path}", file=sys.stderr)
                             return shared_path
                         except Exception as e:
                             continue
@@ -79,10 +80,10 @@ def _get_default_energy_data_path():
     fallback_path = "/tmp/lithops_energy_data"
     try:
         os.makedirs(fallback_path, exist_ok=True)
-        print(f"✅ Using fallback energy data path: {fallback_path}")
+        print(f"✅ Using fallback energy data path: {fallback_path}", file=sys.stderr)
         return fallback_path
     except Exception as e:
-        print(f"❌ Cannot create fallback path: {e}")
+        print(f"❌ Cannot create fallback path: {e}", file=sys.stderr)
         return "/tmp"
 
 
@@ -117,7 +118,7 @@ class EnergyDataJSONLogger:
             os.makedirs(self.json_dir, exist_ok=True)
             os.chmod(self.json_dir, 0o777)  # rwx for all users
             logger.info(f"Created energy data directory: {self.json_dir}")
-            print(f"✅ Energy JSON files will be stored in: {self.json_dir}")
+            print(f"✅ Energy JSON files will be stored in: {self.json_dir}", file=sys.stderr)
         except Exception as e:
             logger.error(f"Error creating energy data directory: {e}")
             print(f"❌ Error creating {self.json_dir}, using fallback directory")

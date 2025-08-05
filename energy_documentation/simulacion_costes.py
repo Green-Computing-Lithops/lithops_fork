@@ -1,15 +1,8 @@
-import lithops
-from lithops.storage import Storage ## abstraccion de lithops para interactuar con el subyacente : interfaz comun independiente al storage
-
-import logging
-import os
-import time
-from datetime import datetime
-
-# Enable debug logging
-# logging.basicConfig(level=logging.DEBUG)
-# os.environ['LITHOPS_DEBUG'] = '1'
-
+#!/usr/bin/env python3
+"""
+Módulo de simulación de costes para AWS Lambda + S3
+Optimizado para usar en container runtime de Lithops
+"""
 
 def calcular_coste_aws_lambda(num_invocaciones, memoria_mb=128, duracion_estimada_ms=1000, region='us-east-1'):
     """
@@ -159,107 +152,16 @@ def mostrar_simulacion_costes(resultado):
     print("="*60 + "\n")
 
 
-def funcion_german ( x ): 
-    storage = Storage()
-    try:
-        # Use the same bucket as configured in lithops
-        bucket_name = "lithops-us-east-1-45dk"
-        
-        # Create a test object
-        test_key = f"test-execution/test-file-{x}.txt"
-        test_data = f"Hello from AWS Lambda task {x}"
-        storage.put_object(bucket_name, test_key, test_data)
-        print(f"Created test file in S3: {bucket_name}/{test_key}")
-        
-        # List objects in the test directory
-        keys = storage.list_keys(bucket_name, prefix="test-execution/")
-        print(f"Found keys in {bucket_name}: {keys}")
-        
-        # Read back the test object
-        result = storage.get_object(bucket_name, test_key)
-        print(f"Read back from S3: {result}")
-        
-    except Exception as e:
-        print(f"AWS S3 operation failed: {e}")
-        import traceback
-        traceback.print_exc()
-    return x + 1
-
-executor = lithops.FunctionExecutor(log_level='debug')
-
-# SIMULACIÓN DE COSTES ANTES DE LA EJECUCIÓN
-print("🧮 Realizando simulación de costes antes de la ejecución...")
-
-# Configuración para la simulación
-datos_entrada = [1, 2, 3]  # Los datos que vas a procesar
-num_invocaciones = len(datos_entrada)
-memoria_estimada_mb = 128  # Memoria por defecto de Lambda
-duracion_estimada_ms = 2000  # Duración estimada por función (incluyendo S3 ops)
-
-# Calcular costes estimados
-simulacion = calcular_coste_aws_lambda(
-    num_invocaciones=num_invocaciones,
-    memoria_mb=memoria_estimada_mb,
-    duracion_estimada_ms=duracion_estimada_ms,
-    region='us-east-1'
-)
-
-# Mostrar simulación
-mostrar_simulacion_costes(simulacion)
-
-# Preguntar al usuario si desea continuar
-respuesta = input("¿Deseas continuar con la ejecución? (s/n): ").lower().strip()
-
-if respuesta in ['s', 'si', 'sí', 'y', 'yes']:
-    print("\n🚀 Iniciando ejecución...")
+# Test de la funcionalidad
+if __name__ == "__main__":
+    print("🧪 Test del módulo de simulación de costes")
+    print("-" * 40)
     
-    # Registrar tiempo de inicio
-    tiempo_inicio = time.time()
-    inicio_timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    print(f"⏰ Inicio: {inicio_timestamp}")
-    
-    # Ejecutar las funciones
-    ft = executor.map(funcion_german, datos_entrada)
-    
-    # Obtener resultados
-    print("\n📋 Obteniendo resultados...")
-    resultados = executor.get_result(ft)
-    
-    # Calcular tiempo transcurrido
-    tiempo_fin = time.time()
-    fin_timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    duracion_real_segundos = tiempo_fin - tiempo_inicio
-    duracion_real_ms = duracion_real_segundos * 1000
-    
-    print(f"\n✅ EJECUCIÓN COMPLETADA")
-    print(f"⏰ Fin: {fin_timestamp}")
-    print(f"⏱️  Duración total: {duracion_real_segundos:.2f} segundos")
-    print(f"📊 Resultados: {resultados}")
-    
-    # Recalcular costes con duración real
-    print("\n🔄 Recalculando costes con duración real...")
-    simulacion_real = calcular_coste_aws_lambda(
-        num_invocaciones=num_invocaciones,
-        memoria_mb=memoria_estimada_mb,
-        duracion_estimada_ms=int(duracion_real_ms / len(datos_entrada)),  # Duración promedio por función
-        region='us-east-1'
+    # Test con parámetros de ejemplo
+    resultado = calcular_coste_aws_lambda(
+        num_invocaciones=3,
+        memoria_mb=256,
+        duracion_estimada_ms=2000
     )
     
-    print("\n📊 COMPARACIÓN ESTIMADO vs REAL:")
-    print(f"   • Duración estimada por función: {duracion_estimada_ms} ms")
-    print(f"   • Duración real promedio: {int(duracion_real_ms / len(datos_entrada))} ms")
-    print(f"   • Coste estimado: ${simulacion['total']['coste_total_usd']}")
-    print(f"   • Coste real: ${simulacion_real['total']['coste_total_usd']}")
-    
-    diferencia = simulacion_real['total']['coste_total_usd'] - simulacion['total']['coste_total_usd']
-    if diferencia > 0:
-        print(f"   • Diferencia: +${diferencia:.6f} (más caro de lo estimado)")
-    elif diferencia < 0:
-        print(f"   • Diferencia: ${diferencia:.6f} (más barato de lo estimado)")
-    else:
-        print(f"   • Diferencia: $0 (igual al estimado)")
-
-else:
-    print("\n❌ Ejecución cancelada por el usuario.")
-
- 
+    mostrar_simulacion_costes(resultado)

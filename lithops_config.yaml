@@ -1,0 +1,26 @@
+lithops: 
+    backend: aws_lambda
+    storage: aws_s3
+    data_cleaner: True
+    monitoring: storage
+    monitoring_interval: 2
+    data_limit: 4  # in MiB
+    execution_timeout: 1800
+    log_level: DEBUG
+    log_format: "%(asctime)s [%(levelname)s] %(name)s -- %(message)s"
+
+
+
+aws_lambda:
+    execution_role: arn:aws:iam::851725525148:role/lambdaLithopsExecutionRole
+    runtime_timeout: 180
+    runtime_memory: 1024
+    max_workers: 1000
+    worker_processes: 1
+    invoke_pool_threads: 64
+    architecture: x86_64
+    ephemeral_storage: 512
+
+aws_s3:
+    storage_bucket: lithops-us-east-1-45dk
+    region: us-east-1
