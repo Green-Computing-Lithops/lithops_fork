@@ -239,7 +239,7 @@ def run_task(task):
         logger.debug('JobRunner process finished')
 
         # Process system monitoring data
-        cpu_info = sys_monitor.get_cpu_info()
+        cpu_info = sys_monitor.get_cpu_info() # obtain CPU usage and time
         call_status.add('worker_func_cpu_usage', cpu_info['usage'])
         call_status.add('worker_func_cpu_system_time', round(cpu_info['system'], 8))
         call_status.add('worker_func_cpu_user_time', round(cpu_info['user'], 8))
@@ -258,6 +258,9 @@ def run_task(task):
         # inigo: Calculate average CPU usage across all cores
         avg_cpu_usage = sum(cpu_info['usage']) / len(cpu_info['usage']) if cpu_info['usage'] else 0
         call_status.add('worker_func_avg_cpu_usage', avg_cpu_usage)
+        call_status.add('worker_func_avg_cpu_usage_v2', round(cpu_info['user'], 8))
+        # call_status.add('worker_func_avg_cpu_usage_v2', avg_cpu_usage * round(cpu_info['user'], 8))
+
         call_status.add('worker_func_energy_consumption', avg_cpu_usage * round(cpu_info['user'], 8))
         
         # Process energy monitoring data

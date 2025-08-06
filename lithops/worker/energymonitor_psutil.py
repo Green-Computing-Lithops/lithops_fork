@@ -332,11 +332,66 @@ class EnergyMonitor:
             'duration': duration,
             'source': 'psutil_system_monitoring',
             'system': {},
-            'process': {}
+            'process': {},
+            'cpu_info': {}
         }
         
         try:
             import psutil
+            
+            # === CPU INFORMATION ===
+            # Core counts
+            try:
+                physical_cores = psutil.cpu_count(logical=False) or 0
+                logical_cores = psutil.cpu_count(logical=True) or 0
+                result['cpu_info']['cores_physical'] = physical_cores
+                result['cpu_info']['cores_logical'] = logical_cores
+                print(f"CPU Cores: {physical_cores} physical, {logical_cores} logical")
+            except Exception as e:
+                print(f"Error getting CPU core counts: {e}")
+                result['cpu_info']['cores_physical'] = 0
+                result['cpu_info']['cores_logical'] = 0
+            
+            # CPU frequency
+            try:
+                freq_info = psutil.cpu_freq()
+                if freq_info:
+                    result['cpu_info']['frequency_current'] = freq_info.current
+                    result['cpu_info']['frequency_max'] = freq_info.max
+                    result['cpu_info']['frequency_min'] = freq_info.min
+                    print(f"CPU Frequency: {freq_info.current:.0f} MHz (max: {freq_info.max:.0f}, min: {freq_info.min:.0f})")
+                else:
+                    result['cpu_info']['frequency_current'] = 0.0
+                    result['cpu_info']['frequency_max'] = 0.0
+                    result['cpu_info']['frequency_min'] = 0.0
+            except Exception as e:
+                print(f"Error getting CPU frequency: {e}")
+                result['cpu_info']['frequency_current'] = 0.0
+                result['cpu_info']['frequency_max'] = 0.0
+                result['cpu_info']['frequency_min'] = 0.0
+            
+            # CPU brand and detailed info using py-cpuinfo if available
+            try:
+                import cpuinfo
+                cpu_info = cpuinfo.get_cpu_info()
+                result['cpu_info']['brand'] = cpu_info.get('brand_raw', 'Unknown')
+                result['cpu_info']['model'] = cpu_info.get('cpu_info_ver_info', {}).get('model_name', 'Unknown')
+                result['cpu_info']['arch'] = cpu_info.get('arch', 'Unknown')
+                result['cpu_info']['vendor_id'] = cpu_info.get('vendor_id_raw', 'Unknown')
+                print(f"CPU Brand: {result['cpu_info']['brand']}")
+                print(f"CPU Model: {result['cpu_info']['model']}")
+            except ImportError:
+                print("py-cpuinfo not available for detailed CPU info")
+                result['cpu_info']['brand'] = 'Unknown'
+                result['cpu_info']['model'] = 'Unknown'
+                result['cpu_info']['arch'] = 'Unknown'
+                result['cpu_info']['vendor_id'] = 'Unknown'
+            except Exception as e:
+                print(f"Error getting detailed CPU info: {e}")
+                result['cpu_info']['brand'] = 'Unknown'
+                result['cpu_info']['model'] = 'Unknown'
+                result['cpu_info']['arch'] = 'Unknown'
+                result['cpu_info']['vendor_id'] = 'Unknown'
             
             # === SYSTEM-WIDE METRICS ===
             # CPU metrics

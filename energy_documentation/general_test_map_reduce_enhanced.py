@@ -37,7 +37,6 @@ previous
 cd inigo_test/
 
 """
-import psutil
 import pprint
 import lithops
 import platform
@@ -55,7 +54,7 @@ iterdata = [2]
 #     return total
 
 def print_cpu_info():
-    """Print detailed CPU information."""
+    """Print basic CPU information without using psutil or cpuinfo."""
     print("=" * 80)
     print("🖥️  SYSTEM & CPU INFORMATION")
     print("=" * 80)
@@ -69,43 +68,13 @@ def print_cpu_info():
     print(f"   System: {platform.system()}")
     print(f"   Python Version: {platform.python_version()}")
     
-    # CPU details from cpuinfo if available
-    try:
-        import cpuinfo
-        cpu_info = cpuinfo.get_cpu_info()
-        
-        print(f"\n💻 CPU DETAILS:")
-        print(f"   Brand: {cpu_info.get('brand_raw', 'Unknown')}")
-        print(f"   Model: {cpu_info.get('cpu_info_ver_info', {}).get('model_name', 'Unknown')}")
-        print(f"   Architecture: {cpu_info.get('arch', 'Unknown')}")
-        print(f"   Bits: {cpu_info.get('bits', 'Unknown')}")
-        print(f"   Vendor ID: {cpu_info.get('vendor_id_raw', 'Unknown')}")
-        print(f"   Flags: {', '.join(cpu_info.get('flags', [])[:10])}{'...' if len(cpu_info.get('flags', [])) > 10 else ''}")
-    except Exception as e:
-        print(f"   CPU info error: {e}")
+    print(f"\n💻 CPU DETAILS:")
+    print(f"   CPU information will be collected by the energy monitoring system")
+    print(f"   (psutil and cpuinfo functionality moved to energymonitor_psutil.py)")
     
-    # CPU performance metrics
     print(f"\n⚡ CPU PERFORMANCE:")
-    print(f"   Physical cores: {psutil.cpu_count(logical=False)}")
-    print(f"   Total cores: {psutil.cpu_count(logical=True)}")
-    
-    # CPU frequency
-    try:
-        freq_info = psutil.cpu_freq()
-        if freq_info:
-            print(f"   Base frequency: {freq_info.current:.2f} MHz")
-            print(f"   Max frequency: {freq_info.max:.2f} MHz")
-            print(f"   Min frequency: {freq_info.min:.2f} MHz")
-    except:
-        print(f"   Frequency: Not available")
-    
-    # CPU usage per core
-    try:
-        cpu_usage = psutil.cpu_percent(interval=1, percpu=True)
-        print(f"   CPU usage per core: {[f'{usage:.1f}%' for usage in cpu_usage]}")
-        print(f"   Average CPU usage: {sum(cpu_usage)/len(cpu_usage):.1f}%")
-    except:
-        print(f"   CPU usage: Not available")
+    print(f"   CPU performance metrics will be collected during function execution")
+    print(f"   Check the energy monitoring results for detailed CPU usage")
     
     print("=" * 80)
 
@@ -361,11 +330,11 @@ def print_working_methods_summary():
     print(f"   🔌 RAPL Energy Monitoring: ❌ Not available (requires RAPL access)")
     print(f"   🐝 eBPF Energy Monitoring: ❌ Not available (requires eBPF/root)")
     print(f"   🚀 Enhanced/TDP Monitoring: ✅ Working (TDP-based estimation)")
-    print(f"   💻 Base/PSUtil Monitoring: ✅ Working (System resource monitoring)")
+    print(f"   💻 PSUtil System Monitoring: ✅ Working (System resource monitoring)")
     
     print(f"\n🎯 WORKING METHODS:")
     print(f"   • Enhanced/TDP: Provides package and cores energy estimates")
-    print(f"   • Base/PSUtil: Provides comprehensive system resource monitoring (CPU, memory, disk, network)")
+    print(f"   • PSUtil System: Provides comprehensive system resource monitoring (CPU, memory, disk, network)")
     print(f"   • Legacy Energy: Basic energy consumption calculation")
     
     print(f"\n💡 TO ENABLE MORE METHODS:")
@@ -467,8 +436,8 @@ def print_stats(future):
         print(f"   Cores Energy: N/A")
         print(f"   CPU Cycles: N/A")
     
-    # === BASE/PSUTIL SYSTEM MONITORING ===
-    print("\n💻 BASE/PSUTIL SYSTEM MONITORING:")
+    # === PSUtil SYSTEM MONITORING ===
+    print("\n💻 PSUtil SYSTEM MONITORING:")
     base_available = future.stats.get('worker_func_base_available', False)
     base_source = future.stats.get('worker_func_base_source', 'unavailable')
     print(f"   Status: {'✅ Available' if base_available else '❌ Unavailable'}")
@@ -510,14 +479,14 @@ def print_stats(future):
         print(f"   Process Metrics: N/A")
         print(f"   Hardware Status: N/A")
     
-    # === ENERGY METHODS COMPARISON (excluding Base/PSUtil since it's system monitoring) ===
+    # === ENERGY METHODS COMPARISON (excluding PSUtil since it's system monitoring) ===
     print("\n📈 ENERGY METHODS COMPARISON:")
     methods = [
         ('PERF', future.stats.get('worker_func_perf_energy_total', 0.0), future.stats.get('worker_func_perf_available', False)),
         ('RAPL', future.stats.get('worker_func_rapl_energy_total', 0.0), future.stats.get('worker_func_rapl_available', False)),
         ('eBPF', future.stats.get('worker_func_ebpf_energy_total', 0.0), future.stats.get('worker_func_ebpf_available', False)),
         ('Enhanced', future.stats.get('worker_func_enhanced_energy_total', 0.0), future.stats.get('worker_func_enhanced_available', False))
-        # Note: Base/PSUtil excluded as it provides system monitoring, not energy measurement
+        # Note: PSUtil excluded as it provides system monitoring, not energy measurement
     ]
     
     active_methods = [(name, energy) for name, energy, available in methods if available and energy > 0]
@@ -578,32 +547,16 @@ def print_stats(future):
     if cloud_instance:
         print(f"      Cloud Instance Type: {cloud_instance}")
     
-    # Also show the local CPU info for additional comparison
-    try:
-        import cpuinfo
-        cpu_info = cpuinfo.get_cpu_info()
-        print(f"\n   🔧 FROM LOCAL CPUINFO (for comparison):")
-        print(f"      CPU Brand: {cpu_info.get('brand_raw', 'Unknown')}")
-        print(f"      CPU Architecture: {cpu_info.get('arch', 'Unknown')}")
-        print(f"      CPU Bits: {cpu_info.get('bits', 'Unknown')}")
-        print(f"      Physical Cores: {psutil.cpu_count(logical=False)}")
-        print(f"      Logical Cores: {psutil.cpu_count(logical=True)}")
-        print(f"      Processor Type: {cpu_info.get('arch_string_raw', 'Unknown')}")
-    except ImportError:
-        print(f"\n   🔧 FROM LOCAL CPUINFO (for comparison):")
-        print(f"      CPU Info: py-cpuinfo not available (install with: pip install py-cpuinfo)")
-    except Exception as e:
-        print(f"\n   🔧 FROM LOCAL CPUINFO (for comparison):")
-        print(f"      CPU Info: Error getting detailed info - {e}")
-        print(f"\n   🔧 FROM LOCAL PSUTIL:")
-        print(f"      Physical Cores: {psutil.cpu_count(logical=False)}")
-        print(f"      Logical Cores: {psutil.cpu_count(logical=True)}")
-        print(f"      (Install py-cpuinfo for detailed CPU information)")
+    # CPU information is now handled by the energy monitoring system
+    print(f"\n   🔧 CPU INFORMATION:")
+    print(f"      CPU details are collected by the energy monitoring system")
+    print(f"      (psutil and cpuinfo functionality moved to energymonitor_psutil.py)")
+    print(f"      Check the energy monitoring results above for detailed CPU information")
     
     print("=" * 80)
 
     print(f"CPU User Time: {future.stats.get('worker_func_cpu_user_time', 'N/A')}")
-    print(f"CPU Usage Average: {future.stats.get('worker_func_avg_cpu_usage', 'N/A')}")  # busqueda de que libreria usa : psutils --> percentaje uso cpu 
+    print(f"CPU Usage Average: {future.stats.get('worker_func_avg_cpu_usage', 'N/A')}")
     print(f"Energy Consumption: {future.stats.get('worker_func_energy_consumption', 'N/A')}")
     
     # Method used: 

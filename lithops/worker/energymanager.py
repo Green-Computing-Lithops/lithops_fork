@@ -58,9 +58,9 @@ class EnergyManager:
                 'class': 'EBPFEnergyMonitor',
                 'module': 'lithops.worker.energymonitor_ebpf'
             },
-            'base': {
+            'psutil': {
                 'class': 'EnergyMonitor',
-                'module': 'lithops.worker.energymonitor_base'
+                'module': 'lithops.worker.energymonitor_psutil'
             }
         }
         
@@ -136,117 +136,6 @@ class EnergyManager:
             logger.error(f"Error reading stats file: {e}")
         
         return None
-    
-    def _collect_cpu_information(self):
-        """Collect CPU information from within the energy manager."""
-        import platform
-        import psutil
-        
-        cpu_data = {
-            'cpu_name': 'Unknown',
-            'cpu_brand': 'Unknown', 
-            'cpu_architecture': 'Unknown',
-            'cpu_cores_physical': 0,
-            'cpu_cores_logical': 0,
-            'cpu_frequency': 0.0
-        }
-        
-        try:
-            # Get basic architecture
-            cpu_data['cpu_architecture'] = platform.machine()
-            
-            # Get core counts
-            cpu_data['cpu_cores_physical'] = psutil.cpu_count(logical=False) or 0
-            cpu_data['cpu_cores_logical'] = psutil.cpu_count(logical=True) or 0
-            
-            # Get CPU frequency
-            try:
-                freq_info = psutil.cpu_freq()
-                if freq_info:
-                    cpu_data['cpu_frequency'] = freq_info.current
-            except:
-                pass
-            
-            # Platform-specific CPU name detection
-            if platform.system() == "Darwin":  # macOS
-                try:
-                    import subprocess
-                    output = subprocess.check_output(["sysctl", "-n", "machdep.cpu.brand_string"]).decode().strip()
-                    cpu_data['cpu_name'] = output
-                    
-                    # Determine brand
-                    if "intel" in output.lower():
-                        cpu_data['cpu_brand'] = "Intel"
-                    elif "amd" in output.lower():
-                        cpu_data['cpu_brand'] = "AMD"
-                    elif "apple" in output.lower():
-                        cpu_data['cpu_brand'] = "Apple"
-                    else:
-                        # Extract first word as brand
-                        first_word = output.split()[0] if output else 'Unknown'
-                        cpu_data['cpu_brand'] = first_word
-                        
-                except Exception as e:
-                    logger.debug(f"Error getting macOS CPU info: {e}")
-                    
-            elif platform.system() == "Linux":
-                try:
-                    with open('/proc/cpuinfo', 'r') as f:
-                        cpuinfo = f.read()
-                        
-                        # Extract model name
-                        import re
-                        model_match = re.search(r'model name\s+:\s+(.*)', cpuinfo)
-                        if model_match:
-                            cpu_data['cpu_name'] = model_match.group(1).strip()
-                            
-                            # Determine brand
-                            if "intel" in cpu_data['cpu_name'].lower():
-                                cpu_data['cpu_brand'] = "Intel"
-                            elif "amd" in cpu_data['cpu_name'].lower():
-                                cpu_data['cpu_brand'] = "AMD"
-                            elif "arm" in cpu_data['cpu_name'].lower():
-                                cpu_data['cpu_brand'] = "ARM"
-                            else:
-                                # Extract first word as brand
-                                first_word = cpu_data['cpu_name'].split()[0] if cpu_data['cpu_name'] else 'Unknown'
-                                cpu_data['cpu_brand'] = first_word
-                                
-                except Exception as e:
-                    logger.debug(f"Error getting Linux CPU info: {e}")
-                    
-            elif platform.system() == "Windows":
-                try:
-                    import subprocess
-                    output = subprocess.check_output("wmic cpu get name", shell=True).decode()
-                    lines = output.strip().split('\n')
-                    if len(lines) >= 2:
-                        cpu_data['cpu_name'] = lines[1].strip()
-                        
-                        # Determine brand
-                        if "intel" in cpu_data['cpu_name'].lower():
-                            cpu_data['cpu_brand'] = "Intel"
-                        elif "amd" in cpu_data['cpu_name'].lower():
-                            cpu_data['cpu_brand'] = "AMD"
-                        else:
-                            first_word = cpu_data['cpu_name'].split()[0] if cpu_data['cpu_name'] else 'Unknown'
-                            cpu_data['cpu_brand'] = first_word
-                            
-                except Exception as e:
-                    logger.debug(f"Error getting Windows CPU info: {e}")
-            
-            # Fallback to platform.processor() if name is still unknown
-            if cpu_data['cpu_name'] == 'Unknown':
-                try:
-                    cpu_data['cpu_name'] = platform.processor() or 'Unknown'
-                except:
-                    pass
-                    
-        except Exception as e:
-            logger.error(f"Error collecting CPU information: {e}")
-        
-        return cpu_data
-    
     def process_energy_data(self, task, call_status, cpu_info):
         """Process energy data from all monitors and add to call status."""
         
@@ -278,7 +167,7 @@ class EnergyManager:
             'worker_func_ebpf_source': 'unavailable',
             'worker_func_ebpf_available': False,
             
-            # Base/PSUtil system monitoring metrics (no energy, but system resource monitoring)
+            # PSUtil system monitoring metrics (no energy, but system resource monitoring)
             'worker_func_base_cpu_percent': 0.0,
             'worker_func_base_memory_percent': 0.0,
             'worker_func_base_memory_used_mb': 0.0,
@@ -302,18 +191,10 @@ class EnergyManager:
             'worker_func_cpu_frequency': 0.0,
         }
         
-        # Collect CPU information from within the energy manager
-        try:
-            cpu_data = self._collect_cpu_information()
-            energy_fields['worker_func_cpu_name'] = cpu_data['cpu_name']
-            energy_fields['worker_func_cpu_brand'] = cpu_data['cpu_brand']
-            energy_fields['worker_func_cpu_architecture'] = cpu_data['cpu_architecture']
-            energy_fields['worker_func_cpu_cores_physical'] = cpu_data['cpu_cores_physical']
-            energy_fields['worker_func_cpu_cores_logical'] = cpu_data['cpu_cores_logical']
-            energy_fields['worker_func_cpu_frequency'] = cpu_data['cpu_frequency']
-            logger.info(f"Collected CPU info in EnergyManager: {cpu_data['cpu_name']} ({cpu_data['cpu_brand']})")
-        except Exception as e:
-            logger.error(f"Error collecting CPU information in EnergyManager: {e}")
+        # CPU information will be collected from PSUtil monitor when available
+        # Add basic platform info as fallback
+        import platform
+        energy_fields['worker_func_cpu_architecture'] = platform.machine()
         
         # Process data from each monitor
         max_duration = 0.0
@@ -359,11 +240,13 @@ class EnergyManager:
                         energy_fields['worker_func_ebpf_source'] = source
                         energy_fields['worker_func_ebpf_available'] = True
                         
-                    elif method_name == 'base':
-                        # PSUtil provides system resource monitoring, not energy
+                    elif method_name == 'psutil':
+                        # PSUtil provides system resource monitoring and CPU information
                         system_data = energy_data.get('system', {})
                         process_data = energy_data.get('process', {})
+                        cpu_info_data = energy_data.get('cpu_info', {})
                         
+                        # System and process monitoring
                         energy_fields['worker_func_base_cpu_percent'] = system_data.get('cpu_percent', 0.0)
                         energy_fields['worker_func_base_memory_percent'] = system_data.get('memory_percent', 0.0)
                         energy_fields['worker_func_base_memory_used_mb'] = system_data.get('memory_used_mb', 0.0)
@@ -377,6 +260,16 @@ class EnergyManager:
                         energy_fields['worker_func_base_cpu_temp_celsius'] = system_data.get('cpu_temp_celsius', 0.0)
                         energy_fields['worker_func_base_source'] = source
                         energy_fields['worker_func_base_available'] = True
+                        
+                        # CPU information from PSUtil
+                        energy_fields['worker_func_cpu_cores_physical'] = cpu_info_data.get('cores_physical', 0)
+                        energy_fields['worker_func_cpu_cores_logical'] = cpu_info_data.get('cores_logical', 0)
+                        energy_fields['worker_func_cpu_frequency'] = cpu_info_data.get('frequency_current', 0.0)
+                        energy_fields['worker_func_cpu_brand'] = cpu_info_data.get('brand', 'Unknown')
+                        energy_fields['worker_func_cpu_name'] = cpu_info_data.get('model', 'Unknown')
+                        energy_fields['worker_func_cpu_architecture'] = cpu_info_data.get('arch', energy_fields['worker_func_cpu_architecture'])
+                        
+                        logger.info(f"Collected CPU info from PSUtil: {energy_fields['worker_func_cpu_name']} ({energy_fields['worker_func_cpu_brand']})")
                     
                     # Log energy data for each method
                     try:
