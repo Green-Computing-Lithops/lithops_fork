@@ -253,20 +253,10 @@ def run_task(task):
         call_status.add('worker_func_vms', mem_info['vms'])
         call_status.add('worker_func_uss', mem_info['uss'])
         
-        ##~~ENERGY~~##
         #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-        # inigo: Calculate average CPU usage across all cores
-        avg_cpu_usage = sum(cpu_info['usage']) / len(cpu_info['usage']) if cpu_info['usage'] else 0
-        call_status.add('worker_func_avg_cpu_usage', avg_cpu_usage)
-        call_status.add('worker_func_avg_cpu_usage_v2', round(cpu_info['user'], 8))
-        # call_status.add('worker_func_avg_cpu_usage_v2', avg_cpu_usage * round(cpu_info['user'], 8))
-
-        call_status.add('worker_func_energy_consumption', avg_cpu_usage * round(cpu_info['user'], 8))
-        
-        # Process energy monitoring data
+        ##~~ENERGY~~## # Process energy monitoring data
         energy_manager.process_energy_data(task, call_status, cpu_info)
         #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
 
         if jrp.is_alive():
             # If process is still alive after jr.join(job_max_runtime), kill it

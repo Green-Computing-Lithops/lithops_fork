@@ -139,6 +139,10 @@ class EnergyManager:
     def process_energy_data(self, task, call_status, cpu_info):
         """Process energy data from all monitors and add to call status."""
         
+        # Calculate CPU metrics first
+        avg_cpu_usage = sum(cpu_info['usage']) / len(cpu_info['usage']) if cpu_info['usage'] else 0
+        energy_consumption = avg_cpu_usage * round(cpu_info['user'], 8)
+        
         # Initialize all energy fields to 0
         energy_fields = {
             # Duration and overall metrics
@@ -189,6 +193,10 @@ class EnergyManager:
             'worker_func_cpu_cores_physical': 0,
             'worker_func_cpu_cores_logical': 0,
             'worker_func_cpu_frequency': 0.0,
+            
+            # CPU metrics calculated from CPU info
+            'worker_func_avg_cpu_usage': avg_cpu_usage,
+            'worker_func_energy_consumption': energy_consumption, # old rapl , wrong format 
         }
         
         # CPU information will be collected from PSUtil monitor when available
@@ -287,9 +295,28 @@ class EnergyManager:
         for field_name, field_value in energy_fields.items():
             call_status.add(field_name, field_value)
         
+        # Create worker_func_energy_method_used field with consistent ordering
+        method_order = ['perf', 'rapl', 'ebpf', 'psutil']
+        available_methods = []
+        
+        for method in method_order:
+            if self.monitor_status.get(method, False) and self.monitors.get(method) is not None:
+                available_methods.append(method)
+            else:
+                available_methods.append('null')
+        
+        # Set the energy method used field
+        if available_methods:
+            energy_method_used = ', '.join(available_methods)
+        else:
+            energy_method_used = 'n/a'
+        
+        call_status.add('worker_func_energy_method_used', energy_method_used)
+        
         # Log summary of collected data
         active_methods = [m for m, s in self.monitor_status.items() if s and self.monitors[m] is not None]
         logger.info(f"Energy data collected from {len(active_methods)} methods: {active_methods}")
+        logger.info(f"Energy method used: {energy_method_used}")
         
         # Log non-zero energy values for debugging
         non_zero_fields = {k: v for k, v in energy_fields.items() if isinstance(v, (int, float)) and v > 0}
