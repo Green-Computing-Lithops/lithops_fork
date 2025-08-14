@@ -57,13 +57,13 @@ Let me analyze what's missing: I can see that the test script is looking for "en
    - `worker_func_ebpf_source`, `worker_func_ebpf_available`
 
 4. **Base/PSUtil System Monitoring**:
-   - `worker_func_base_cpu_percent`, `worker_func_base_memory_percent`, etc.
-   - `worker_func_base_process_cpu_percent`, `worker_func_base_process_memory_mb`
-   - `worker_func_base_source`, `worker_func_base_available`
+   - `worker_func_psutil_cpu_percent`, `worker_func_psutil_memory_percent`, etc.
+   - `worker_func_psutil_process_cpu_percent`, `worker_func_psutil_process_memory_mb`
+   - `worker_func_psutil_source`, `worker_func_psutil_available`
 
 5. **CPU Information**:
-   - `worker_func_cpu_name`, `worker_func_cpu_brand`, `worker_func_cpu_architecture`
-   - `worker_func_cpu_cores_physical`, `worker_func_cpu_cores_logical`, `worker_func_cpu_frequency`
+   - `worker_func_psutil_cpu_name`, `worker_func_psutil_cpu_brand`, `worker_func_psutil_cpu_architecture`
+   - `worker_func_psutil_cpu_cores_physical`, `worker_func_psutil_cpu_cores_logical`, `worker_func_psutil_cpu_frequency`
 
 ### ❌ **Missing Enhanced Metrics** (expected by test but not in EnergyManager):
 - `worker_func_enhanced_available`
@@ -91,9 +91,9 @@ This is why in the test output we see:
 Would you like me to help implement the missing Enhanced energy monitoring method in the EnergyManager?
 
 Datawithinigo: could you also include this metrics inside the tdp area Duration: 0.582 seconds (worker_func_energy_duration)
-CPU User Time: 32517.76 seconds (worker_func_cpu_user_time)
+CPU User Time: 32517.76 seconds (worker_func_psutil_cpu_user_time)
 CPU Usage Average: 11.39% (worker_func_avg_cpu_usage)
-Process CPU: 0.10% (worker_func_base_process_cpu_percent)
+Process CPU: 0.10% (worker_func_psutil_process_cpu_percent)
 
 GitHub Copilot: I'll help you add those metrics to the enhanced energy analysis section. Let me locate where the "enhanced" energy efficiency metrics are displayed and add the duration, CPU user time, CPU usage average, and process CPU metrics there. I can see the enhanced energy efficiency metrics section. Now I'll add the requested metrics (duration, CPU user time, CPU usage average, and process CPU) to this section. I'll place them right after the TDP utilization line: 
 ```
@@ -134,9 +134,9 @@ This section now displays exactly the metrics you requested:
 1. **Added new section** `⏱️ TIMING & CPU METRICS` right after the basic function analysis
 2. **Included all 4 requested metrics**:
    - `worker_func_energy_duration` → Duration
-   - `worker_func_cpu_user_time` → CPU User Time  
+   - `worker_func_psutil_cpu_user_time` → CPU User Time  
    - `worker_func_avg_cpu_usage` → CPU Usage Average
-   - `worker_func_base_process_cpu_percent` → Process CPU
+   - `worker_func_psutil_process_cpu_percent` → Process CPU
 
 3. **Positioned strategically** so these metrics are always visible regardless of whether enhanced energy monitoring is available
 

@@ -6,7 +6,7 @@ executed with different numbers of workers (1, 2, 4, 8, 16).
 
 It compares two energy metrics:
 1. worker_func_perf_energy_cores - Direct energy measurement from perf
-2. worker_func_avg_cpu_usage * worker_func_cpu_user_time - Calculated energy estimation
+2. worker_func_avg_cpu_usage * worker_func_psutil_cpu_user_time - Calculated energy estimation
 
 Run with sudo:
 sudo env "PATH=$PATH" python3 inigo_test/energy_comparison_word_count.py
@@ -106,7 +106,7 @@ def print_stats(future, worker_count, execution_time, total_words):
     # Get the metrics we're interested in
     perf_energy_cores = future.stats.get('worker_func_perf_energy_cores', 0)
     avg_cpu_usage = future.stats.get('worker_func_avg_cpu_usage', 0)
-    cpu_user_time = future.stats.get('worker_func_cpu_user_time', 0)
+    cpu_user_time = future.stats.get('worker_func_psutil_cpu_user_time', 0)
     
     # Calculate the product metric
     cpu_energy_product = avg_cpu_usage * cpu_user_time
@@ -206,7 +206,7 @@ def run_test_with_workers(num_workers):
         # Get energy metrics from the single worker
         perf_energy_cores = energy_future.stats.get('worker_func_perf_energy_cores', 0)
         avg_cpu_usage = energy_future.stats.get('worker_func_avg_cpu_usage', 0)
-        cpu_user_time = energy_future.stats.get('worker_func_cpu_user_time', 0)
+        cpu_user_time = energy_future.stats.get('worker_func_psutil_cpu_user_time', 0)
         
         # Calculate the product metric using execution time instead of CPU user time
         # This provides a more accurate energy estimation based on actual runtime

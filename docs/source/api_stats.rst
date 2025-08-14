@@ -91,9 +91,9 @@ The user can obtain these statistics through the future object:
      'worker_cold_start': True,
      'worker_end_tstamp': 1647526902.397567,
      'worker_exec_time': 0.23604679,
-     'worker_func_cpu_usage': [0.0, 25.0],
-     'worker_func_cpu_user_time': 70566.78125,
-     'worker_func_cpu_system_time': 16418.34375,
+     'worker_func_psutil_cpu_usage': [0.0, 25.0],
+     'worker_func_psutil_cpu_user_time': 70566.78125,
+     'worker_func_psutil_cpu_system_time': 16418.34375,
      'worker_func_end_tstamp': 1647526902.2985177,
      'worker_func_exec_time': 1.91e-06,
      'worker_func_recv_net_io': 5968,
@@ -146,11 +146,11 @@ The user can obtain these statistics through the future object:
      - Timestamp in which the worker function had finished its execution.
    * - :code:`worker_exec_time`
      - Total execution time of the worker function (lithops wrapper + user defined funtion execution time).
-   * - :code:`worker_func_cpu_usage`
+   * - :code:`worker_func_psutil_cpu_usage`
      - Array of CPU usage percentages, with each element representing the average usage of each CPU core during user-defined function execution.
-   * - :code:`worker_func_cpu_user_time`
+   * - :code:`worker_func_psutil_cpu_user_time`
      - CPU user time during the execution of the user-defined function.
-   * - :code:`worker_func_cpu_system_time`
+   * - :code:`worker_func_psutil_cpu_system_time`
      - CPU system time during the execution of the user-defined function.
    * - :code:`worker_func_end_tstamp`
      - Timestamp of the end of execution of the user-defined function.

@@ -17,594 +17,429 @@
 
 import os
 import time
-import re
-import subprocess
 import logging
-from .energymonitor_json_utils import store_energy_data_json, update_function_name
 
 logger = logging.getLogger(__name__)
 
 
 class EnergyMonitor:
     """
-    Simplified energy monitor that focuses only on power/energy-pkg/ from perf.
-    Based on the approach from perf_alternative_powerapi.py.
+    PSUtil-based system resource monitor.
+    This monitor does NOT measure energy - it only collects system resource metrics
+    using the psutil library for system monitoring and CPU information.
     """
+    
     def __init__(self, process_id):
         self.process_id = process_id
-        self.perf_process = None
         self.start_time = None
         self.end_time = None
-        self.energy_value = None
-        self.cpu_percent = None
-        self.perf_output_file = f"/tmp/perf_energy_{process_id}.txt"
         self.function_name = None
+        self.initial_metrics = {}
+        self.final_metrics = {}
         
-        # Print directly to terminal for debugging
-        print(f"\n==== ENERGY MONITOR INITIALIZED FOR PROCESS {process_id} ====")
-        
-    def _get_available_energy_events(self):
-        """Get a list of available energy-related events from perf."""
-        print("\n==== CHECKING AVAILABLE ENERGY EVENTS ====")
-        try:
-            # Try both with and without sudo
-            try:
-                print("Trying 'sudo perf list'...")
-                result = subprocess.run(
-                    ["sudo", "perf", "list"], 
-                    stdout=subprocess.PIPE,
-                    stderr=subprocess.PIPE,
-                    text=True,
-                    check=False
-                )
-                print(f"sudo perf list result: {result.returncode}")
-            except Exception as e:
-                print(f"Error with sudo perf list: {e}")
-                # Fallback to non-sudo
-                print("Trying 'perf list'...")
-                result = subprocess.run(
-                    ["perf", "list"], 
-                    stdout=subprocess.PIPE,
-                    stderr=subprocess.PIPE,
-                    text=True,
-                    check=False
-                )
-                print(f"perf list result: {result.returncode}")
-            
-            output = result.stdout + result.stderr
-            print(f"Perf list output length: {len(output)} characters")
-            
-            # Extract energy-related events
-            energy_events = []
-            for line in output.splitlines():
-                if "energy" in line.lower():
-                    print(f"Found energy line: {line}")
-                    # Extract the event name from the line
-                    match = re.search(r'(\S+/\S+/)', line)
-                    if match:
-                        energy_events.append(match.group(1))
-            
-            # Prepare the events string
-            if energy_events:
-                print(f"Found {len(energy_events)} energy events: {', '.join(energy_events)}")
-                
-                # Check for both pkg and cores events
-                pkg_events = [e for e in energy_events if "energy-pkg" in e]
-                cores_events = [e for e in energy_events if "energy-cores" in e]
-                
-                events = []
-                if pkg_events:
-                    print(f"Found energy-pkg event: {pkg_events[0]}")
-                    events.append(pkg_events[0])
-                else:
-                    print("No energy-pkg event found, using default")
-                    events.append("power/energy-pkg/")
-                    
-                if cores_events:
-                    print(f"Found energy-cores event: {cores_events[0]}")
-                    events.append(cores_events[0])
-                else:
-                    print("No energy-cores event found, using default")
-                    events.append("power/energy-cores/")
-                
-                # Join events with comma
-                events_str = ",".join(events)
-                print(f"Using energy events: {events_str}")
-                return events_str
-            else:
-                print("No energy events found in perf list")
-                
-            # Default to both pkg and cores events
-            events_str = "power/energy-pkg/,power/energy-cores/"
-            print(f"Using default energy events: {events_str}")
-            return events_str
-        except Exception as e:
-            print(f"Error getting available energy events: {e}")
-            # Default to both pkg and cores events
-            events_str = "power/energy-pkg/,power/energy-cores/"
-            print(f"Using default energy events: {events_str}")
-            return events_str
+        logger.debug(f"PSUtil system monitor initialized for process {process_id}")
         
     def start(self):
-        """Start monitoring energy consumption using perf for power/energy-pkg/."""
-        print("\n==== STARTING ENERGY MONITORING ====")
+        """Start collecting initial system metrics using PSUtil."""
+        logger.debug("Starting PSUtil system monitoring")
+        
         try:
-            # Get the energy-pkg event
-            energy_event = self._get_available_energy_events()
-            print(f"Using energy event: {energy_event}")
-            
-            # Create a unique output file for this run
-            self.perf_output_file = f"/tmp/perf_energy_{self.process_id}_{int(time.time())}.txt"
-            
-            # Start perf in the background to monitor the entire function execution
-            # This will capture the actual energy consumption of the function
-            print("Starting perf stat to monitor energy consumption...")
-            
-            # Use a direct approach with sudo
-            cmd = [
-                "sudo", "perf", "stat",
-                "-e", energy_event,
-                "-a",  # Monitor all CPUs
-                "-o", self.perf_output_file  # Output to a file
-            ]
-            
-            print(f"Running command: {' '.join(cmd)}")
-            
-            # Start perf in the background
-            self.perf_process = subprocess.Popen(
-                cmd,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                text=True
-            )
+            import psutil
             
             self.start_time = time.time()
-            print(f"Energy monitoring started at: {self.start_time}")
-            print(f"Perf process PID: {self.perf_process.pid}")
+            
+            # Collect initial system metrics
+            self.initial_metrics = self._collect_system_metrics()
+            
+            logger.info("PSUtil system monitoring started successfully")
             return True
+            
+        except ImportError:
+            logger.warning("PSUtil not available - system monitoring disabled")
+            return False
         except Exception as e:
-            print(f"Error starting energy monitoring: {e}")
+            logger.error(f"Error starting PSUtil system monitoring: {e}")
             return False
             
     def stop(self):
-        """Stop monitoring energy consumption and collect results."""
-        print("\n==== STOPPING ENERGY MONITORING ====")
+        """Stop monitoring and collect final system metrics."""
+        logger.debug("Stopping PSUtil system monitoring")
         
-        if self.perf_process is None:
-            print("No perf process to stop")
+        if self.start_time is None:
+            logger.warning("PSUtil monitoring was not started")
             return
             
         try:
-            # Record the end time
+            import psutil
+            
             self.end_time = time.time()
+            
+            # Collect final system metrics
+            self.final_metrics = self._collect_system_metrics()
+            
             duration = self.end_time - self.start_time
-            print(f"Energy monitoring stopped at: {self.end_time}")
-            print(f"Monitoring duration: {duration:.2f} seconds")
+            logger.info(f"PSUtil system monitoring stopped after {duration:.2f} seconds")
             
-            # Stop the perf process
-            print(f"Stopping perf process (PID: {self.perf_process.pid})...")
-            
-            # Send SIGINT to perf to make it output the results
-            import signal
-            os.kill(self.perf_process.pid, signal.SIGINT)
-            
-            # Wait for the process to exit
-            try:
-                stdout, stderr = self.perf_process.communicate(timeout=5)
-                print("Perf process exited")
-                print(f"Perf stdout: {stdout}")
-                print(f"Perf stderr: {stderr}")
-            except subprocess.TimeoutExpired:
-                print("Perf process did not exit, killing it")
-                self.perf_process.kill()
-                stdout, stderr = self.perf_process.communicate()
-            
-            # Initialize energy values
-            self.energy_pkg = None
-            self.energy_cores = None
-            
-            # Read the output file
-            print(f"Reading perf output file: {self.perf_output_file}")
-            try:
-                if os.path.exists(self.perf_output_file):
-                    with open(self.perf_output_file, 'r') as f:
-                        perf_output = f.read()
-                        print(f"Perf output file content: {perf_output}")
-                        
-                        # Process the output to extract energy values
-                        for line in perf_output.splitlines():
-                            print(f"Processing line: {line}")
-                            if "Joules" in line:
-                                # Use a more precise regex to extract the energy value
-                                match = re.search(r'\s*([\d,.]+)\s+Joules\s+(\S+)', line)
-                                if match:
-                                    value_str = match.group(1).replace(',', '.')
-                                    event_name = match.group(2)
-                                    try:
-                                        # Handle numbers with multiple dots (e.g. 1.043.75 -> 1043.75)
-                                        if value_str.count('.') > 1:
-                                            parts = value_str.split('.')
-                                            value_str = ''.join(parts[:-1]) + '.' + parts[-1]
-                                            print(f"Converted malformed value with multiple dots to {value_str}")
-                                        
-                                        energy_value = float(value_str)
-                                        print(f"Found energy value: {energy_value} Joules for {event_name}")
-                                        
-                                        # Store the value based on the event type
-                                        if "energy-pkg" in event_name:
-                                            self.energy_pkg = energy_value
-                                            print(f"Stored energy-pkg value: {self.energy_pkg} Joules")
-                                        elif "energy-cores" in event_name:
-                                            self.energy_cores = energy_value
-                                            print(f"Stored energy-cores value: {self.energy_cores} Joules")
-                                    except ValueError as e:
-                                        print(f"Could not convert '{value_str}' to float: {e}")
-                else:
-                    print(f"Perf output file not found: {self.perf_output_file}")
-            except Exception as e:
-                print(f"Error reading perf output file: {e}")
-            
-            # If we couldn't get the energy values, try a direct command
-            if self.energy_pkg is None and self.energy_cores is None:
-                print("No energy values from perf output file, trying direct command...")
-                
-                # Get the energy events
-                energy_events = self._get_available_energy_events()
-                
-                # Run a direct perf command for a CPU-intensive task
-                # This will give us a better baseline than sleep
-                cmd = f"sudo perf stat -e {energy_events} -a python3 -c 'for i in range(10000000): pass' 2>&1"
-                print(f"Running command: {cmd}")
-                
-                result = subprocess.run(
-                    cmd,
-                    shell=True,
-                    stdout=subprocess.PIPE,
-                    stderr=subprocess.STDOUT,
-                    text=True,
-                    check=False
-                )
-                
-                # Get the output
-                output = result.stdout
-                print(f"Direct command output: {output}")
-                
-                # Process the output to extract energy values
-                for line in output.splitlines():
-                    print(f"Processing line: {line}")
-                    if "Joules" in line:
-                        match = re.search(r'\s*([\d,.]+)\s+Joules\s+(\S+)', line)
-                        if match:
-                            value_str = match.group(1).replace(',', '.')
-                            event_name = match.group(2)
-                            try:
-                                # Handle numbers with multiple dots (e.g. 1.043.75 -> 1043.75)
-                                if value_str.count('.') > 1:
-                                    parts = value_str.split('.')
-                                    value_str = ''.join(parts[:-1]) + '.' + parts[-1]
-                                    print(f"Converted malformed value with multiple dots to {value_str}")
-                                
-                                energy_value = float(value_str)
-                                print(f"Found energy value: {energy_value} Joules for {event_name}")
-                                
-                                # Store the value based on the event type
-                                if "energy-pkg" in event_name:
-                                    self.energy_pkg = energy_value
-                                    print(f"Stored energy-pkg value: {self.energy_pkg} Joules")
-                                elif "energy-cores" in event_name:
-                                    self.energy_cores = energy_value
-                                    print(f"Stored energy-cores value: {self.energy_cores} Joules")
-                            except ValueError as e:
-                                print(f"Could not convert '{value_str}' to float: {e}")
-            
-            # Get CPU percentage for the process
-            try:
-                import psutil
-                print(f"Getting CPU percentage for process {self.process_id}")
-                process = psutil.Process(self.process_id)
-                # Call cpu_percent once with interval=None to get the value since the last call
-                process.cpu_percent()
-                # Call again with a small interval to get a more accurate reading
-                self.cpu_percent = process.cpu_percent(interval=0.1) / 100.0  # Convert to fraction
-                print(f"CPU percentage: {self.cpu_percent * 100:.2f}%")
-            except Exception as e:
-                print(f"Error getting CPU percentage: {e}")
-                
-            # Clean up the output file
-            try:
-                if os.path.exists(self.perf_output_file):
-                    os.remove(self.perf_output_file)
-                    print(f"Removed perf output file: {self.perf_output_file}")
-            except Exception as e:
-                print(f"Error removing perf output file: {e}")
-                
         except Exception as e:
-            print(f"Error stopping energy monitoring: {e}")
+            logger.error(f"Error stopping PSUtil system monitoring: {e}")
             
-    def get_energy_data(self):
-        """Get comprehensive system monitoring data using PSUtil (not energy measurement)."""
-        print("\n==== GETTING SYSTEM MONITORING DATA (PSUtil) ====")
-        duration = self.end_time - self.start_time if self.end_time and self.start_time else 0
-        print(f"Duration: {duration:.2f} seconds")
-        
-        # Create the result dictionary focused on system monitoring
-        result = {
-            'duration': duration,
-            'source': 'psutil_system_monitoring',
-            'system': {},
-            'process': {},
-            'cpu_info': {}
-        }
+    def _collect_system_metrics(self):
+        """Collect comprehensive system metrics using PSUtil."""
+        metrics = {}
         
         try:
             import psutil
             
             # === CPU INFORMATION ===
-            # Core counts
             try:
+                # Core counts
                 physical_cores = psutil.cpu_count(logical=False) or 0
                 logical_cores = psutil.cpu_count(logical=True) or 0
-                result['cpu_info']['cores_physical'] = physical_cores
-                result['cpu_info']['cores_logical'] = logical_cores
-                print(f"CPU Cores: {physical_cores} physical, {logical_cores} logical")
-            except Exception as e:
-                print(f"Error getting CPU core counts: {e}")
-                result['cpu_info']['cores_physical'] = 0
-                result['cpu_info']['cores_logical'] = 0
-            
-            # CPU frequency
-            try:
+                metrics['cpu_cores_physical'] = physical_cores
+                metrics['cpu_cores_logical'] = logical_cores
+                
+                # CPU frequency
                 freq_info = psutil.cpu_freq()
                 if freq_info:
-                    result['cpu_info']['frequency_current'] = freq_info.current
-                    result['cpu_info']['frequency_max'] = freq_info.max
-                    result['cpu_info']['frequency_min'] = freq_info.min
-                    print(f"CPU Frequency: {freq_info.current:.0f} MHz (max: {freq_info.max:.0f}, min: {freq_info.min:.0f})")
+                    metrics['cpu_freq_current'] = freq_info.current
+                    metrics['cpu_freq_max'] = freq_info.max
+                    metrics['cpu_freq_min'] = freq_info.min
                 else:
-                    result['cpu_info']['frequency_current'] = 0.0
-                    result['cpu_info']['frequency_max'] = 0.0
-                    result['cpu_info']['frequency_min'] = 0.0
+                    metrics['cpu_freq_current'] = 0.0
+                    metrics['cpu_freq_max'] = 0.0
+                    metrics['cpu_freq_min'] = 0.0
+                    
             except Exception as e:
-                print(f"Error getting CPU frequency: {e}")
-                result['cpu_info']['frequency_current'] = 0.0
-                result['cpu_info']['frequency_max'] = 0.0
-                result['cpu_info']['frequency_min'] = 0.0
-            
-            # CPU brand and detailed info using py-cpuinfo if available
-            try:
-                import cpuinfo
-                cpu_info = cpuinfo.get_cpu_info()
-                result['cpu_info']['brand'] = cpu_info.get('brand_raw', 'Unknown')
-                result['cpu_info']['model'] = cpu_info.get('cpu_info_ver_info', {}).get('model_name', 'Unknown')
-                result['cpu_info']['arch'] = cpu_info.get('arch', 'Unknown')
-                result['cpu_info']['vendor_id'] = cpu_info.get('vendor_id_raw', 'Unknown')
-                print(f"CPU Brand: {result['cpu_info']['brand']}")
-                print(f"CPU Model: {result['cpu_info']['model']}")
-            except ImportError:
-                print("py-cpuinfo not available for detailed CPU info")
-                result['cpu_info']['brand'] = 'Unknown'
-                result['cpu_info']['model'] = 'Unknown'
-                result['cpu_info']['arch'] = 'Unknown'
-                result['cpu_info']['vendor_id'] = 'Unknown'
-            except Exception as e:
-                print(f"Error getting detailed CPU info: {e}")
-                result['cpu_info']['brand'] = 'Unknown'
-                result['cpu_info']['model'] = 'Unknown'
-                result['cpu_info']['arch'] = 'Unknown'
-                result['cpu_info']['vendor_id'] = 'Unknown'
+                logger.debug(f"Error collecting CPU info: {e}")
+                metrics['cpu_cores_physical'] = 0
+                metrics['cpu_cores_logical'] = 0
+                metrics['cpu_freq_current'] = 0.0
+                metrics['cpu_freq_max'] = 0.0
+                metrics['cpu_freq_min'] = 0.0
             
             # === SYSTEM-WIDE METRICS ===
-            # CPU metrics
             try:
-                cpu_percent = psutil.cpu_percent(interval=0.1)
-                result['system']['cpu_percent'] = cpu_percent
-                print(f"System CPU usage: {cpu_percent:.2f}%")
-            except Exception as e:
-                print(f"Error getting system CPU: {e}")
-                result['system']['cpu_percent'] = 0.0
-            
-            # Memory metrics
-            try:
+                # CPU usage - use non-blocking call first, then blocking call for accurate measurement
+                # First call initializes the measurement, second call gets the actual usage
+                psutil.cpu_percent(interval=None)  # Non-blocking call to initialize
+                time.sleep(0.5)  # Wait a bit for meaningful measurement
+                cpu_percent = psutil.cpu_percent(interval=None)  # Get the actual measurement
+                metrics['system_cpu_percent'] = cpu_percent
+                
+                # Also get per-CPU percentages for more detailed analysis
+                per_cpu_percent = psutil.cpu_percent(interval=None, percpu=True)
+                metrics['per_cpu_percent'] = per_cpu_percent
+                metrics['max_cpu_percent'] = max(per_cpu_percent) if per_cpu_percent else 0.0
+                metrics['avg_cpu_percent'] = sum(per_cpu_percent) / len(per_cpu_percent) if per_cpu_percent else 0.0
+                
+                # Memory usage
                 memory = psutil.virtual_memory()
-                result['system']['memory_percent'] = memory.percent
-                result['system']['memory_used_mb'] = memory.used / (1024 * 1024)
-                print(f"System Memory: {memory.percent:.2f}% ({memory.used / (1024 * 1024):.1f} MB used)")
+                metrics['system_memory_percent'] = memory.percent
+                metrics['system_memory_used_mb'] = memory.used / (1024 * 1024)
+                metrics['system_memory_total_mb'] = memory.total / (1024 * 1024)
+                
             except Exception as e:
-                print(f"Error getting memory info: {e}")
-                result['system']['memory_percent'] = 0.0
-                result['system']['memory_used_mb'] = 0.0
+                logger.debug(f"Error collecting system metrics: {e}")
+                metrics['system_cpu_percent'] = 0.0
+                metrics['per_cpu_percent'] = []
+                metrics['max_cpu_percent'] = 0.0
+                metrics['avg_cpu_percent'] = 0.0
+                metrics['system_memory_percent'] = 0.0
+                metrics['system_memory_used_mb'] = 0.0
+                metrics['system_memory_total_mb'] = 0.0
             
-            # Disk I/O metrics (since start)
+            # === DISK I/O METRICS ===
             try:
                 disk_io = psutil.disk_io_counters()
                 if disk_io:
-                    # Convert bytes to MB
-                    result['system']['disk_io_read_mb'] = disk_io.read_bytes / (1024 * 1024)
-                    result['system']['disk_io_write_mb'] = disk_io.write_bytes / (1024 * 1024)
-                    print(f"Disk I/O: Read {disk_io.read_bytes / (1024 * 1024):.2f} MB, Write {disk_io.write_bytes / (1024 * 1024):.2f} MB")
+                    metrics['disk_read_bytes'] = disk_io.read_bytes
+                    metrics['disk_write_bytes'] = disk_io.write_bytes
+                    metrics['disk_read_count'] = disk_io.read_count
+                    metrics['disk_write_count'] = disk_io.write_count
                 else:
-                    result['system']['disk_io_read_mb'] = 0.0
-                    result['system']['disk_io_write_mb'] = 0.0
+                    metrics['disk_read_bytes'] = 0
+                    metrics['disk_write_bytes'] = 0
+                    metrics['disk_read_count'] = 0
+                    metrics['disk_write_count'] = 0
             except Exception as e:
-                print(f"Error getting disk I/O: {e}")
-                result['system']['disk_io_read_mb'] = 0.0
-                result['system']['disk_io_write_mb'] = 0.0
+                logger.debug(f"Error collecting disk I/O: {e}")
+                metrics['disk_read_bytes'] = 0
+                metrics['disk_write_bytes'] = 0
+                metrics['disk_read_count'] = 0
+                metrics['disk_write_count'] = 0
             
-            # Network I/O metrics (since start)
+            # === NETWORK I/O METRICS ===
             try:
                 net_io = psutil.net_io_counters()
                 if net_io:
-                    # Convert bytes to MB
-                    result['system']['network_sent_mb'] = net_io.bytes_sent / (1024 * 1024)
-                    result['system']['network_recv_mb'] = net_io.bytes_recv / (1024 * 1024)
-                    print(f"Network I/O: Sent {net_io.bytes_sent / (1024 * 1024):.2f} MB, Received {net_io.bytes_recv / (1024 * 1024):.2f} MB")
+                    metrics['network_sent_bytes'] = net_io.bytes_sent
+                    metrics['network_recv_bytes'] = net_io.bytes_recv
+                    metrics['network_sent_packets'] = net_io.packets_sent
+                    metrics['network_recv_packets'] = net_io.packets_recv
                 else:
-                    result['system']['network_sent_mb'] = 0.0
-                    result['system']['network_recv_mb'] = 0.0
+                    metrics['network_sent_bytes'] = 0
+                    metrics['network_recv_bytes'] = 0
+                    metrics['network_sent_packets'] = 0
+                    metrics['network_recv_packets'] = 0
             except Exception as e:
-                print(f"Error getting network I/O: {e}")
-                result['system']['network_sent_mb'] = 0.0
-                result['system']['network_recv_mb'] = 0.0
-            
-            # CPU frequency
-            try:
-                cpu_freq = psutil.cpu_freq()
-                if cpu_freq:
-                    result['system']['cpu_freq_current'] = cpu_freq.current
-                    print(f"CPU Frequency: {cpu_freq.current:.0f} MHz")
-                else:
-                    result['system']['cpu_freq_current'] = 0.0
-            except Exception as e:
-                print(f"Error getting CPU frequency: {e}")
-                result['system']['cpu_freq_current'] = 0.0
-            
-            # CPU temperature (if available)
-            try:
-                temps = psutil.sensors_temperatures()
-                if temps:
-                    # Try to get CPU temperature from common sensor names
-                    cpu_temp = 0.0
-                    for name, entries in temps.items():
-                        if 'cpu' in name.lower() or 'core' in name.lower():
-                            if entries:
-                                cpu_temp = entries[0].current
-                                break
-                    result['system']['cpu_temp_celsius'] = cpu_temp
-                    if cpu_temp > 0:
-                        print(f"CPU Temperature: {cpu_temp:.1f}°C")
-                    else:
-                        print("CPU Temperature: Not available")
-                else:
-                    result['system']['cpu_temp_celsius'] = 0.0
-            except Exception as e:
-                print(f"Error getting CPU temperature: {e}")
-                result['system']['cpu_temp_celsius'] = 0.0
+                logger.debug(f"Error collecting network I/O: {e}")
+                metrics['network_sent_bytes'] = 0
+                metrics['network_recv_bytes'] = 0
+                metrics['network_sent_packets'] = 0
+                metrics['network_recv_packets'] = 0
             
             # === PROCESS-SPECIFIC METRICS ===
             try:
                 process = psutil.Process(self.process_id)
                 
-                # Process CPU usage
-                process_cpu = process.cpu_percent(interval=0.1)
-                result['process']['cpu_percent'] = process_cpu
-                print(f"Process CPU usage: {process_cpu:.2f}%")
+                # Process CPU and memory - use non-blocking for process too
+                process.cpu_percent()  # Initialize measurement
+                time.sleep(0.2)  # Short wait for process measurement
+                process_cpu = process.cpu_percent()
+                metrics['process_cpu_percent'] = process_cpu
                 
-                # Process memory usage
                 process_memory = process.memory_info()
-                result['process']['memory_mb'] = process_memory.rss / (1024 * 1024)
-                print(f"Process Memory: {process_memory.rss / (1024 * 1024):.1f} MB")
+                metrics['process_memory_rss_mb'] = process_memory.rss / (1024 * 1024)
+                metrics['process_memory_vms_mb'] = process_memory.vms / (1024 * 1024)
+                
+                # Process status
+                metrics['process_status'] = process.status()
+                metrics['process_num_threads'] = process.num_threads()
+                
+                # Additional process info
+                try:
+                    metrics['process_cpu_times'] = process.cpu_times()._asdict()
+                except:
+                    metrics['process_cpu_times'] = {}
                 
             except psutil.NoSuchProcess:
-                print(f"Process {self.process_id} no longer exists")
-                result['process']['cpu_percent'] = 0.0
-                result['process']['memory_mb'] = 0.0
+                logger.debug(f"Process {self.process_id} no longer exists")
+                metrics['process_cpu_percent'] = 0.0
+                metrics['process_memory_rss_mb'] = 0.0
+                metrics['process_memory_vms_mb'] = 0.0
+                metrics['process_status'] = 'not_found'
+                metrics['process_num_threads'] = 0
+                metrics['process_cpu_times'] = {}
             except Exception as e:
-                print(f"Error getting process metrics: {e}")
-                result['process']['cpu_percent'] = 0.0
-                result['process']['memory_mb'] = 0.0
-        
+                logger.debug(f"Error collecting process metrics: {e}")
+                metrics['process_cpu_percent'] = 0.0
+                metrics['process_memory_rss_mb'] = 0.0
+                metrics['process_memory_vms_mb'] = 0.0
+                metrics['process_status'] = 'error'
+                metrics['process_num_threads'] = 0
+                metrics['process_cpu_times'] = {}
+            
+            # === CPU TEMPERATURE (if available) ===
+            try:
+                temps = psutil.sensors_temperatures()
+                cpu_temp = 0.0
+                if temps:
+                    for name, entries in temps.items():
+                        if 'cpu' in name.lower() or 'core' in name.lower():
+                            if entries:
+                                cpu_temp = entries[0].current
+                                break
+                metrics['cpu_temp_celsius'] = cpu_temp
+            except Exception as e:
+                logger.debug(f"Error collecting CPU temperature: {e}")
+                metrics['cpu_temp_celsius'] = 0.0
+            
+            # === DETAILED CPU INFO (if py-cpuinfo available) ===
+            try:
+                import cpuinfo
+                cpu_info = cpuinfo.get_cpu_info()
+                metrics['cpu_brand'] = cpu_info.get('brand_raw', 'Unknown')
+                metrics['cpu_model'] = cpu_info.get('cpu_info_ver_info', {}).get('model_name', 'Unknown')
+                metrics['cpu_arch'] = cpu_info.get('arch', 'Unknown')
+                metrics['cpu_vendor'] = cpu_info.get('vendor_id_raw', 'Unknown')
+            except ImportError:
+                logger.debug("py-cpuinfo not available")
+                metrics['cpu_brand'] = 'Unknown'
+                metrics['cpu_model'] = 'Unknown'
+                metrics['cpu_arch'] = 'Unknown'
+                metrics['cpu_vendor'] = 'Unknown'
+            except Exception as e:
+                logger.debug(f"Error getting detailed CPU info: {e}")
+                metrics['cpu_brand'] = 'Unknown'
+                metrics['cpu_model'] = 'Unknown'
+                metrics['cpu_arch'] = 'Unknown'
+                metrics['cpu_vendor'] = 'Unknown'
+            
         except ImportError:
-            print("PSUtil not available")
-            result['source'] = 'unavailable'
+            logger.warning("PSUtil not available")
         except Exception as e:
-            print(f"Error collecting system metrics: {e}")
+            logger.error(f"Error collecting system metrics: {e}")
+        
+        return metrics
+        
+    def get_energy_data(self):
+        """
+        Get system monitoring data. 
+        NOTE: This does NOT provide energy measurements - only system resource metrics.
+        """
+        duration = self.end_time - self.start_time if self.end_time and self.start_time else 0
+        
+        # Create the result dictionary - NO ENERGY DATA, only system monitoring
+        result = {
+            'duration': duration,
+            'source': 'psutil_system_monitoring',
+            'energy': {},  # Empty - PSUtil doesn't measure energy
+            'system': {},
+            'process': {},
+            'cpu_info': {}
+        }
+        
+        if not self.initial_metrics or not self.final_metrics:
+            logger.warning("PSUtil metrics not available - monitoring may not have been started/stopped properly")
+            result['source'] = 'unavailable'
+            return result
+        
+        try:
+            # === SYSTEM METRICS (improved CPU calculation) ===
+            # Use the better measurement from final metrics, with more precision
+            initial_cpu = self.initial_metrics.get('system_cpu_percent', 0.0)
+            final_cpu = self.final_metrics.get('system_cpu_percent', 0.0)
+            initial_avg_cpu = self.initial_metrics.get('avg_cpu_percent', 0.0)
+            final_avg_cpu = self.final_metrics.get('avg_cpu_percent', 0.0)
+            initial_max_cpu = self.initial_metrics.get('max_cpu_percent', 0.0)
+            final_max_cpu = self.final_metrics.get('max_cpu_percent', 0.0)
+            
+            # Use the maximum of all measurements to get the best representation
+            best_cpu_measurement = max(initial_cpu, final_cpu, initial_avg_cpu, final_avg_cpu, 
+                                     initial_max_cpu, final_max_cpu)
+            
+            # If we still have 0, try to calculate from the difference in measurements
+            if best_cpu_measurement == 0.0:
+                # Calculate weighted average giving more weight to final measurement
+                if final_cpu > 0 or initial_cpu > 0:
+                    best_cpu_measurement = (initial_cpu * 0.3 + final_cpu * 0.7)
+                elif final_avg_cpu > 0 or initial_avg_cpu > 0:
+                    best_cpu_measurement = (initial_avg_cpu * 0.3 + final_avg_cpu * 0.7)
+            
+            result['system'] = {
+                'cpu_percent': round(best_cpu_measurement, 6),  # 6 decimal places for precision
+                'cpu_percent_initial': round(initial_cpu, 6),
+                'cpu_percent_final': round(final_cpu, 6),
+                'cpu_percent_avg_initial': round(initial_avg_cpu, 6),
+                'cpu_percent_avg_final': round(final_avg_cpu, 6),
+                'cpu_percent_max_initial': round(initial_max_cpu, 6),
+                'cpu_percent_max_final': round(final_max_cpu, 6),
+                'per_cpu_initial': self.initial_metrics.get('per_cpu_percent', []),
+                'per_cpu_final': self.final_metrics.get('per_cpu_percent', []),
+                'memory_percent': self.final_metrics.get('system_memory_percent', 0.0),
+                'memory_used_mb': self.final_metrics.get('system_memory_used_mb', 0.0),
+                'memory_total_mb': self.final_metrics.get('system_memory_total_mb', 0.0),
+                'cpu_freq_current': self.final_metrics.get('cpu_freq_current', 0.0),
+                'cpu_temp_celsius': self.final_metrics.get('cpu_temp_celsius', 0.0),
+            }
+            
+            # === DISK I/O DELTA (difference between start and end) ===
+            disk_read_delta = self.final_metrics.get('disk_read_bytes', 0) - self.initial_metrics.get('disk_read_bytes', 0)
+            disk_write_delta = self.final_metrics.get('disk_write_bytes', 0) - self.initial_metrics.get('disk_write_bytes', 0)
+            
+            result['system']['disk_io_read_mb'] = max(0, disk_read_delta) / (1024 * 1024)
+            result['system']['disk_io_write_mb'] = max(0, disk_write_delta) / (1024 * 1024)
+            
+            # === NETWORK I/O DELTA (difference between start and end) ===
+            net_sent_delta = self.final_metrics.get('network_sent_bytes', 0) - self.initial_metrics.get('network_sent_bytes', 0)
+            net_recv_delta = self.final_metrics.get('network_recv_bytes', 0) - self.initial_metrics.get('network_recv_bytes', 0)
+            
+            result['system']['network_sent_mb'] = max(0, net_sent_delta) / (1024 * 1024)
+            result['system']['network_recv_mb'] = max(0, net_recv_delta) / (1024 * 1024)
+            
+            # === PROCESS METRICS ===
+            initial_process_cpu = self.initial_metrics.get('process_cpu_percent', 0.0)
+            final_process_cpu = self.final_metrics.get('process_cpu_percent', 0.0)
+            
+            # Use the maximum process CPU measurement
+            best_process_cpu = max(initial_process_cpu, final_process_cpu)
+            if best_process_cpu == 0.0 and (initial_process_cpu > 0 or final_process_cpu > 0):
+                best_process_cpu = (initial_process_cpu * 0.3 + final_process_cpu * 0.7)
+            
+            result['process'] = {
+                'cpu_percent': round(best_process_cpu, 6),  # 6 decimal places for precision
+                'cpu_percent_initial': round(initial_process_cpu, 6),
+                'cpu_percent_final': round(final_process_cpu, 6),
+                'memory_mb': self.final_metrics.get('process_memory_rss_mb', 0.0),
+                'memory_vms_mb': self.final_metrics.get('process_memory_vms_mb', 0.0),
+                'status': self.final_metrics.get('process_status', 'unknown'),
+                'num_threads': self.final_metrics.get('process_num_threads', 0),
+                'cpu_times': self.final_metrics.get('process_cpu_times', {}),
+            }
+            
+            # === CPU INFORMATION ===
+            result['cpu_info'] = {
+                'cores_physical': self.final_metrics.get('cpu_cores_physical', 0),
+                'cores_logical': self.final_metrics.get('cpu_cores_logical', 0),
+                'frequency_current': self.final_metrics.get('cpu_freq_current', 0.0),
+                'frequency_max': self.final_metrics.get('cpu_freq_max', 0.0),
+                'frequency_min': self.final_metrics.get('cpu_freq_min', 0.0),
+                'brand': self.final_metrics.get('cpu_brand', 'Unknown'),
+                'model': self.final_metrics.get('cpu_model', 'Unknown'),
+                'arch': self.final_metrics.get('cpu_arch', 'Unknown'),
+                'vendor': self.final_metrics.get('cpu_vendor', 'Unknown'),
+            }
+            
+            logger.info(f"PSUtil system monitoring data collected successfully")
+            logger.info(f"System CPU: {result['system']['cpu_percent']:.6f}% (initial: {result['system']['cpu_percent_initial']:.6f}%, final: {result['system']['cpu_percent_final']:.6f}%)")
+            logger.info(f"Process CPU: {result['process']['cpu_percent']:.6f}% (initial: {result['process']['cpu_percent_initial']:.6f}%, final: {result['process']['cpu_percent_final']:.6f}%)")
+            logger.debug(f"Memory: {result['system']['memory_percent']:.1f}%, Process Memory: {result['process']['memory_mb']:.1f} MB")
+            
+        except Exception as e:
+            logger.error(f"Error processing PSUtil system metrics: {e}")
             result['source'] = 'error'
         
-        print(f"Final system monitoring data: {result}")
         return result
         
     def log_energy_data(self, energy_data, task, cpu_info, function_name=None):
-        """Log energy data and store it in JSON format."""
-        import json
-        import logging
-        
-        logger = logging.getLogger(__name__)
-        
-        # Store function name if provided
+        """
+        Log system monitoring data.
+        NOTE: This does NOT log energy data since PSUtil doesn't measure energy.
+        """
         if function_name:
             self.function_name = function_name
         
-        # Log energy consumption
-        logger.info(f"Energy consumption: {energy_data['energy'].get('pkg', 'N/A')} Joules (pkg), {energy_data['energy'].get('cores', 'N/A')} Joules (cores)")
-        logger.info(f"Core percentage: {energy_data['energy'].get('core_percentage', 0) * 100:.2f}%")
-        logger.info(f"Energy efficiency: {energy_data['energy'].get('pkg', 0) / max(energy_data['duration'], 0.001):.2f} Watts")
+        logger.info("=== PSUtil System Monitoring Summary ===")
         
-        # Print energy data in the format requested by the user
-        print("\nPerformance counter stats for 'system wide':")
-        print()
-        # Format the energy value with comma as decimal separator and dot as thousands separator
-        pkg_energy = energy_data['energy'].get('pkg', 0)
+        system_data = energy_data.get('system', {})
+        process_data = energy_data.get('process', {})
+        cpu_info_data = energy_data.get('cpu_info', {})
         
-        # IMPROVED: Handle the case where pkg_energy is 0 - provide reasonable estimates
-        if pkg_energy == 0 and energy_data['duration'] > 0:
-            # Calculate average CPU usage from cpu_info
-            avg_cpu_usage = sum(cpu_info['usage']) / len(cpu_info['usage']) if cpu_info['usage'] else 0
-            
-            # If we have CPU usage data, estimate energy based on it
-            if avg_cpu_usage > 0:
-                # Estimate energy based on CPU usage and duration
-                # This is a rough estimate based on typical server TDP values
-                estimated_energy = (avg_cpu_usage / 100.0) * energy_data['duration'] * 85.0  # 85W server TDP
-                pkg_energy = estimated_energy
-                energy_data['energy']['pkg'] = pkg_energy
-                energy_data['source'] = 'cpu_estimate'
-                print(f"Using CPU-based energy estimate: {pkg_energy:.2f} Joules (based on {avg_cpu_usage:.1f}% CPU)")
-            elif 'cpu_percent' in energy_data and energy_data['cpu_percent'] > 0:
-                # Fallback to process CPU percentage
-                estimated_energy = energy_data['cpu_percent'] * energy_data['duration'] * 85.0  # 85W server TDP
-                pkg_energy = estimated_energy
-                energy_data['energy']['pkg'] = pkg_energy
-                energy_data['source'] = 'cpu_estimate'
-                print(f"Using CPU-based energy estimate: {pkg_energy:.2f} Joules")
-            else:
-                # Last resort: estimate based on duration assuming moderate CPU usage
-                estimated_energy = 0.3 * energy_data['duration'] * 85.0  # Assume 30% CPU usage
-                pkg_energy = estimated_energy
-                energy_data['energy']['pkg'] = pkg_energy
-                energy_data['source'] = 'duration_estimate'
-                print(f"Using duration-based energy estimate: {pkg_energy:.2f} Joules (assuming 30% CPU)")
+        # Log system metrics with high precision
+        logger.info(f"System CPU Usage: {system_data.get('cpu_percent', 0):.6f}%")
+        logger.info(f"  - Initial: {system_data.get('cpu_percent_initial', 0):.6f}%, Final: {system_data.get('cpu_percent_final', 0):.6f}%")
+        logger.info(f"  - Per-CPU Initial: {system_data.get('per_cpu_initial', [])}")
+        logger.info(f"  - Per-CPU Final: {system_data.get('per_cpu_final', [])}")
+        logger.info(f"System Memory Usage: {system_data.get('memory_percent', 0):.1f}% ({system_data.get('memory_used_mb', 0):.1f} MB)")
+        logger.info(f"Disk I/O: Read {system_data.get('disk_io_read_mb', 0):.2f} MB, Write {system_data.get('disk_io_write_mb', 0):.2f} MB")
+        logger.info(f"Network I/O: Sent {system_data.get('network_sent_mb', 0):.2f} MB, Received {system_data.get('network_recv_mb', 0):.2f} MB")
         
-        pkg_energy_str = f"{pkg_energy:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
-        print(f"          {pkg_energy_str} Joules power/energy-pkg/")
+        # Log process metrics with high precision
+        logger.info(f"Process CPU Usage: {process_data.get('cpu_percent', 0):.6f}%")
+        logger.info(f"  - Initial: {process_data.get('cpu_percent_initial', 0):.6f}%, Final: {process_data.get('cpu_percent_final', 0):.6f}%")
+        logger.info(f"Process Memory Usage: {process_data.get('memory_mb', 0):.1f} MB")
         
-        # If we have cores energy data, print it too, otherwise estimate it as 80% of pkg
-        cores_energy = energy_data['energy'].get('cores', pkg_energy * 0.8)
-        if energy_data['energy'].get('cores', 0) == 0:
-            energy_data['energy']['cores'] = cores_energy
-        cores_energy_str = f"{cores_energy:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
-        print(f"          {cores_energy_str} Joules power/energy-cores/")
+        # Log CPU info
+        logger.info(f"CPU: {cpu_info_data.get('brand', 'Unknown')} ({cpu_info_data.get('cores_physical', 0)} physical, {cpu_info_data.get('cores_logical', 0)} logical cores)")
         
-        # Print core percentage
-        core_percentage = cores_energy / max(pkg_energy, 0.001)
-        if energy_data['energy'].get('core_percentage', 0) == 0:
-            energy_data['energy']['core_percentage'] = core_percentage
-        print(f"          {core_percentage * 100:.2f}% core percentage (cores/pkg)")
-        print()
+        if system_data.get('cpu_freq_current', 0) > 0:
+            logger.info(f"CPU Frequency: {system_data.get('cpu_freq_current', 0):.0f} MHz")
         
-        # Store energy consumption data in JSON format using shared utilities
-        store_energy_data_json(energy_data, task, cpu_info, pkg_energy, cores_energy, 
-                              core_percentage, function_name)
+        if system_data.get('cpu_temp_celsius', 0) > 0:
+            logger.info(f"CPU Temperature: {system_data.get('cpu_temp_celsius', 0):.1f}°C")
+        
+        logger.info(f"Monitoring Duration: {energy_data.get('duration', 0):.2f} seconds")
         
     def update_function_name(self, task, function_name):
-        """Update the function name in the JSON files."""
-        # Store function name
+        """Update the function name."""
         self.function_name = function_name
+        logger.debug(f"PSUtil monitor function name updated to: {function_name}")
         
-        # Use shared utility function
-        update_function_name(task, function_name)
-            
     def read_function_name_from_stats(self, stats_file):
-        """Read function name from stats file and update it in the energy monitor."""
-        import logging
-        
-        logger = logging.getLogger(__name__)
-        
+        """Read function name from stats file."""
         if not os.path.exists(stats_file):
             logger.warning(f"Stats file not found: {stats_file}")
             return False
-        
-        function_name_updated = False
-        logger.info(f"Reading stats file for energy monitoring: {stats_file}")
         
         try:
             with open(stats_file, 'r') as fid:
@@ -613,15 +448,11 @@ class EnergyMonitor:
                         key, value = line.strip().split(" ", 1)
                         if key == 'function_name':
                             self.function_name = value
-                            function_name_updated = True
-                            logger.info(f"Found function name in stats file for energy monitoring: {self.function_name}")
-                            break  # Exit loop once function name is found
+                            logger.info(f"PSUtil monitor found function name: {self.function_name}")
+                            return True
                     except Exception as e:
-                        logger.error(f"Error processing stats file line for energy monitoring: {line} - {e}")
-            
-            if not function_name_updated:
-                logger.warning("Function name not found in stats file for energy monitoring")
+                        logger.debug(f"Error processing stats file line: {line} - {e}")
         except Exception as e:
-            logger.error(f"Error reading stats file for energy monitoring: {e}")
+            logger.error(f"Error reading stats file: {e}")
             
-        return function_name_updated
+        return False

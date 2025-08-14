@@ -1,39 +1,7 @@
 """
 Simple Lithops example using the map_reduce method.
 
-In this example the map_reduce() method will launch one
-map function for each entry in 'iterdata', and then it will
-wait locally for the reduce result.
 
-ENHANCED VERSION with comprehensive CPU information from EnergyManager worker.
-
-RUN WITH SUDO:
-
-sudo env "PATH=$PATH" /home/bigrobbin/if __name_if __name__ == "__main__":
-    
-    # Print CPU and system information
-    print_cpu_info()
-    
-    # Print working methods summary
-    print_working_methods_summary()
- 
-
-    # creates an instance of Lithops' FunctionExecutor --> localhost & manage 
-    fexec = lithops.FunctionExecutor()"__main__":
-    
-    # Print CPU and system information
-    print_cpu_info()
-    
-    # Print working methods summary
-    print_working_methods_summary()
- 
-
-    # creates an instance of Lithops' FunctionExecutor --> localhost & manage 
-    fexec = lithops.FunctionExecutor()op/TFG/lithops/venv/bin/python3 inigo_test/map_reduce.py
-
-sudo env "PATH=$PATH" /home/bigrobbin/Desktop/TFG/venv/bin/python3 lithops_fork/inigo_test/general_test_map_reduce.py
-
-previous
 cd inigo_test/
 
 """
@@ -593,7 +561,7 @@ if __name__ == "__main__":
  
 
     print("Async call SLEEP function")
-    fexec = lithops.FunctionExecutor()
+    fexec = lithops.FunctionExecutor(config=config)
     sleep_future = fexec.call_async(sleep_function, iterdata[0])
     result = fexec.get_result(fs=[sleep_future]) # leng --> return list of parameters 
     # pprint.pprint(sleep_future.stats)
@@ -607,12 +575,13 @@ if __name__ == "__main__":
     print_comprehensive_energy_analysis(sleep_future, "sleep_function")
 
     print("\n\nAsync call COSTLY function")
-    fexec = lithops.FunctionExecutor()
+    fexec = lithops.FunctionExecutor(config=config)
     prime_future = fexec.call_async(prime_function, iterdata[0])
     max_prime_method1 = prime_future.result()                     # needed to wait 
     max_prime_method2 = fexec.get_result(fs=[prime_future])       # needed to wait 
     print(f"Method 1 - future.result(): {max_prime_method1}")
     print(f"Method 2 - fexec.get_result(): {max_prime_method2}")
+    
     # Compare results - handle different return formats
     if isinstance(max_prime_method2, (list, tuple)) and len(max_prime_method2) > 0:
         print(f"Both methods return the same max prime number: {max_prime_method1 == max_prime_method2[0]}")

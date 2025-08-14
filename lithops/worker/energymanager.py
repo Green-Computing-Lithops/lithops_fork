@@ -115,6 +115,34 @@ class EnergyManager:
                 except Exception as e:
                     logger.error(f"Error stopping {method_name} energy monitor: {e}")
     
+    def _get_aws_processor_info(self):
+        """Get AWS processor information for Lambda functions in just a few lines."""
+        import os
+        import urllib.request
+        import json
+        import platform
+        
+        processor_info = {}
+        
+        # Quick AWS detection - check for Lambda environment
+        if os.environ.get('AWS_LAMBDA_RUNTIME_API'):
+            processor_info['instance_type'] = 'lambda-function'
+            processor_info['is_lambda'] = True
+            processor_info['memory_size'] = os.environ.get('AWS_LAMBDA_FUNCTION_MEMORY_SIZE', 'unknown')
+            processor_info['architecture'] = platform.machine()
+            
+            # Try quick IMDS call for instance type (works in some AWS environments)
+            try:
+                with urllib.request.urlopen('http://169.254.169.254/latest/meta-data/instance-type', timeout=1) as response:
+                    processor_info['instance_type'] = response.read().decode('utf-8')
+            except:
+                pass  # Keep default lambda-function type
+        else:
+            processor_info['is_lambda'] = False
+            processor_info['instance_type'] = 'unknown'
+        
+        return processor_info
+    
     def read_function_name_from_stats(self, stats_file):
         """Read function name from stats file."""
         if not os.path.exists(stats_file):
@@ -172,27 +200,27 @@ class EnergyManager:
             'worker_func_ebpf_available': False,
             
             # PSUtil system monitoring metrics (no energy, but system resource monitoring)
-            'worker_func_base_cpu_percent': 0.0,
-            'worker_func_base_memory_percent': 0.0,
-            'worker_func_base_memory_used_mb': 0.0,
-            'worker_func_base_disk_io_read_mb': 0.0,
-            'worker_func_base_disk_io_write_mb': 0.0,
-            'worker_func_base_network_sent_mb': 0.0,
-            'worker_func_base_network_recv_mb': 0.0,
-            'worker_func_base_process_cpu_percent': 0.0,
-            'worker_func_base_process_memory_mb': 0.0,
-            'worker_func_base_cpu_freq_current': 0.0,
-            'worker_func_base_cpu_temp_celsius': 0.0,
-            'worker_func_base_source': 'unavailable',
-            'worker_func_base_available': False,
+            'worker_func_psutil_cpu_percent': 0.0,
+            'worker_func_psutil_memory_percent': 0.0,
+            'worker_func_psutil_memory_used_mb': 0.0,
+            'worker_func_psutil_disk_io_read_mb': 0.0,
+            'worker_func_psutil_disk_io_write_mb': 0.0,
+            'worker_func_psutil_network_sent_mb': 0.0,
+            'worker_func_psutil_network_recv_mb': 0.0,
+            'worker_func_psutil_process_cpu_percent': 0.0,
+            'worker_func_psutil_process_memory_mb': 0.0,
+            'worker_func_psutil_cpu_freq_current': 0.0,
+            'worker_func_psutil_cpu_temp_celsius': 0.0,
+            'worker_func_psutil_source': 'unavailable',
+            'worker_func_psutil_available': False,
             
             # CPU Information from EnergyManager
-            'worker_func_cpu_name': 'Unknown',
-            'worker_func_cpu_brand': 'Unknown',
-            'worker_func_cpu_architecture': 'Unknown',
-            'worker_func_cpu_cores_physical': 0,
-            'worker_func_cpu_cores_logical': 0,
-            'worker_func_cpu_frequency': 0.0,
+            'worker_func_psutil_cpu_name': 'Unknown',
+            'worker_func_psutil_cpu_brand': 'Unknown',
+            'worker_func_psutil_cpu_architecture': 'Unknown',
+            'worker_func_psutil_cpu_cores_physical': 0,
+            'worker_func_psutil_cpu_cores_logical': 0,
+            'worker_func_psutil_cpu_frequency': 0.0,
             
             # CPU metrics calculated from CPU info
             'worker_func_avg_cpu_usage': avg_cpu_usage,
@@ -202,7 +230,7 @@ class EnergyManager:
         # CPU information will be collected from PSUtil monitor when available
         # Add basic platform info as fallback
         import platform
-        energy_fields['worker_func_cpu_architecture'] = platform.machine()
+        energy_fields['worker_func_psutil_cpu_architecture'] = platform.machine()
         
         # Process data from each monitor
         max_duration = 0.0
@@ -254,30 +282,38 @@ class EnergyManager:
                         process_data = energy_data.get('process', {})
                         cpu_info_data = energy_data.get('cpu_info', {})
                         
-                        # System and process monitoring
-                        energy_fields['worker_func_base_cpu_percent'] = system_data.get('cpu_percent', 0.0)
-                        energy_fields['worker_func_base_memory_percent'] = system_data.get('memory_percent', 0.0)
-                        energy_fields['worker_func_base_memory_used_mb'] = system_data.get('memory_used_mb', 0.0)
-                        energy_fields['worker_func_base_disk_io_read_mb'] = system_data.get('disk_io_read_mb', 0.0)
-                        energy_fields['worker_func_base_disk_io_write_mb'] = system_data.get('disk_io_write_mb', 0.0)
-                        energy_fields['worker_func_base_network_sent_mb'] = system_data.get('network_sent_mb', 0.0)
-                        energy_fields['worker_func_base_network_recv_mb'] = system_data.get('network_recv_mb', 0.0)
-                        energy_fields['worker_func_base_process_cpu_percent'] = process_data.get('cpu_percent', 0.0)
-                        energy_fields['worker_func_base_process_memory_mb'] = process_data.get('memory_mb', 0.0)
-                        energy_fields['worker_func_base_cpu_freq_current'] = system_data.get('cpu_freq_current', 0.0)
-                        energy_fields['worker_func_base_cpu_temp_celsius'] = system_data.get('cpu_temp_celsius', 0.0)
-                        energy_fields['worker_func_base_source'] = source
-                        energy_fields['worker_func_base_available'] = True
+                        # System and process monitoring with enhanced CPU metrics
+                        energy_fields['worker_func_psutil_cpu_percent'] = system_data.get('cpu_percent', 0.0)
+                        energy_fields['worker_func_psutil_cpu_percent_initial'] = system_data.get('cpu_percent_initial', 0.0)
+                        energy_fields['worker_func_psutil_cpu_percent_final'] = system_data.get('cpu_percent_final', 0.0)
+                        energy_fields['worker_func_psutil_cpu_percent_avg_initial'] = system_data.get('cpu_percent_avg_initial', 0.0)
+                        energy_fields['worker_func_psutil_cpu_percent_avg_final'] = system_data.get('cpu_percent_avg_final', 0.0)
+                        energy_fields['worker_func_psutil_cpu_percent_max_initial'] = system_data.get('cpu_percent_max_initial', 0.0)
+                        energy_fields['worker_func_psutil_cpu_percent_max_final'] = system_data.get('cpu_percent_max_final', 0.0)
+                        energy_fields['worker_func_psutil_memory_percent'] = system_data.get('memory_percent', 0.0)
+                        energy_fields['worker_func_psutil_memory_used_mb'] = system_data.get('memory_used_mb', 0.0)
+                        energy_fields['worker_func_psutil_disk_io_read_mb'] = system_data.get('disk_io_read_mb', 0.0)
+                        energy_fields['worker_func_psutil_disk_io_write_mb'] = system_data.get('disk_io_write_mb', 0.0)
+                        energy_fields['worker_func_psutil_network_sent_mb'] = system_data.get('network_sent_mb', 0.0)
+                        energy_fields['worker_func_psutil_network_recv_mb'] = system_data.get('network_recv_mb', 0.0)
+                        energy_fields['worker_func_psutil_process_cpu_percent'] = process_data.get('cpu_percent', 0.0)
+                        energy_fields['worker_func_psutil_process_cpu_percent_initial'] = process_data.get('cpu_percent_initial', 0.0)
+                        energy_fields['worker_func_psutil_process_cpu_percent_final'] = process_data.get('cpu_percent_final', 0.0)
+                        energy_fields['worker_func_psutil_process_memory_mb'] = process_data.get('memory_mb', 0.0)
+                        energy_fields['worker_func_psutil_cpu_freq_current'] = system_data.get('cpu_freq_current', 0.0)
+                        energy_fields['worker_func_psutil_cpu_temp_celsius'] = system_data.get('cpu_temp_celsius', 0.0)
+                        energy_fields['worker_func_psutil_source'] = source
+                        energy_fields['worker_func_psutil_available'] = True
                         
                         # CPU information from PSUtil
-                        energy_fields['worker_func_cpu_cores_physical'] = cpu_info_data.get('cores_physical', 0)
-                        energy_fields['worker_func_cpu_cores_logical'] = cpu_info_data.get('cores_logical', 0)
-                        energy_fields['worker_func_cpu_frequency'] = cpu_info_data.get('frequency_current', 0.0)
-                        energy_fields['worker_func_cpu_brand'] = cpu_info_data.get('brand', 'Unknown')
-                        energy_fields['worker_func_cpu_name'] = cpu_info_data.get('model', 'Unknown')
-                        energy_fields['worker_func_cpu_architecture'] = cpu_info_data.get('arch', energy_fields['worker_func_cpu_architecture'])
+                        energy_fields['worker_func_psutil_cpu_cores_physical'] = cpu_info_data.get('cores_physical', 0)
+                        energy_fields['worker_func_psutil_cpu_cores_logical'] = cpu_info_data.get('cores_logical', 0)
+                        energy_fields['worker_func_psutil_cpu_frequency'] = cpu_info_data.get('frequency_current', 0.0)
+                        energy_fields['worker_func_psutil_cpu_brand'] = cpu_info_data.get('brand', 'Unknown')
+                        energy_fields['worker_func_psutil_cpu_name'] = cpu_info_data.get('model', 'Unknown')
+                        energy_fields['worker_func_psutil_cpu_architecture'] = cpu_info_data.get('arch', energy_fields['worker_func_psutil_cpu_architecture'])
                         
-                        logger.info(f"Collected CPU info from PSUtil: {energy_fields['worker_func_cpu_name']} ({energy_fields['worker_func_cpu_brand']})")
+                        logger.info(f"Collected CPU info from PSUtil: {energy_fields['worker_func_psutil_cpu_name']} ({energy_fields['worker_func_psutil_cpu_brand']})")
                     
                     # Log energy data for each method
                     try:
@@ -295,6 +331,14 @@ class EnergyManager:
         for field_name, field_value in energy_fields.items():
             call_status.add(field_name, field_value)
         
+        # Get AWS processor information for Lambda functions
+        aws_processor_info = self._get_aws_processor_info()
+        for key, value in aws_processor_info.items():
+            call_status.add(f'worker_func_aws_{key}', value)
+        
+        # Add version indicator for new energy monitoring system
+        call_status.add('worker_func_uss_55', 12)  # Version indicator: 12 = enhanced PSUtil CPU measurement with high precision
+
         # Create worker_func_energy_method_used field with consistent ordering
         method_order = ['perf', 'rapl', 'ebpf', 'psutil']
         available_methods = []

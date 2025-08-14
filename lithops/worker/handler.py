@@ -240,9 +240,9 @@ def run_task(task):
 
         # Process system monitoring data
         cpu_info = sys_monitor.get_cpu_info() # obtain CPU usage and time
-        call_status.add('worker_func_cpu_usage', cpu_info['usage'])
-        call_status.add('worker_func_cpu_system_time', round(cpu_info['system'], 8))
-        call_status.add('worker_func_cpu_user_time', round(cpu_info['user'], 8))
+        call_status.add('worker_func_psutil_cpu_usage', cpu_info['usage'])
+        call_status.add('worker_func_psutil_cpu_system_time', round(cpu_info['system'], 8))
+        call_status.add('worker_func_psutil_cpu_user_time', round(cpu_info['user'], 8))
 
         net_io = sys_monitor.get_network_io()
         call_status.add('worker_func_sent_net_io', net_io['sent'])

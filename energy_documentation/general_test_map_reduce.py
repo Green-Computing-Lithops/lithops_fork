@@ -41,7 +41,7 @@ def print_stats(future):
     # === GENERAL METRICS ===
     print("\n🕒 GENERAL METRICS:")
     print(f"   Duration: {future.stats.get('worker_func_energy_duration', 'N/A')} seconds")
-    print(f"   CPU User Time: {future.stats.get('worker_func_cpu_user_time', 'N/A')} seconds")
+    print(f"   CPU User Time: {future.stats.get('worker_func_psutil_cpu_user_time', 'N/A')} seconds")
     print(f"   CPU Usage Average: {future.stats.get('worker_func_avg_cpu_usage', 'N/A')}%")
     print(f"   Legacy Energy Consumption: {future.stats.get('worker_func_energy_consumption', 'N/A')}")
     print(f"   Legacy Energy Method: {future.stats.get('worker_func_energy_method_used', 'N/A')}")
@@ -125,16 +125,16 @@ def print_stats(future):
     
     # === BASE/PSUTIL ENERGY MONITORING ===
     print("\n💻 BASE/PSUTIL ENERGY MONITORING:")
-    base_available = future.stats.get('worker_func_base_available', False)
-    base_source = future.stats.get('worker_func_base_source', 'unavailable')
+    base_available = future.stats.get('worker_func_psutil_available', False)
+    base_source = future.stats.get('worker_func_psutil_source', 'unavailable')
     print(f"   Status: {'✅ Available' if base_available else '❌ Unavailable'}")
     print(f"   Source: {base_source}")
     
     if base_available:
-        base_pkg = future.stats.get('worker_func_base_energy_pkg', 0.0)
-        base_cores = future.stats.get('worker_func_base_energy_cores', 0.0)
-        base_total = future.stats.get('worker_func_base_energy_total', 0.0)
-        base_cpu_percent = future.stats.get('worker_func_base_cpu_percent', 0.0)
+        base_pkg = future.stats.get('worker_func_psutil_energy_pkg', 0.0)
+        base_cores = future.stats.get('worker_func_psutil_energy_cores', 0.0)
+        base_total = future.stats.get('worker_func_psutil_energy_total', 0.0)
+        base_cpu_percent = future.stats.get('worker_func_psutil_cpu_percent', 0.0)
         
         print(f"   Package Energy: {base_pkg:.6f} Joules")
         print(f"   Cores Energy: {base_cores:.6f} Joules")
@@ -151,7 +151,7 @@ def print_stats(future):
         ('RAPL', future.stats.get('worker_func_rapl_energy_total', 0.0), future.stats.get('worker_func_rapl_available', False)),
         ('eBPF', future.stats.get('worker_func_ebpf_energy_total', 0.0), future.stats.get('worker_func_ebpf_available', False)),
         ('Enhanced', future.stats.get('worker_func_enhanced_energy_total', 0.0), future.stats.get('worker_func_enhanced_available', False)),
-        ('Base', future.stats.get('worker_func_base_energy_total', 0.0), future.stats.get('worker_func_base_available', False))
+        ('Base', future.stats.get('worker_func_psutil_energy_total', 0.0), future.stats.get('worker_func_psutil_available', False))
     ]
     
     active_methods = [(name, energy) for name, energy, available in methods if available and energy > 0]
@@ -171,12 +171,12 @@ def print_stats(future):
     print(f"\n🖥️  CPU INFORMATION (from Energy Manager):")
     
     # NEW: CPU information collected directly by EnergyManager
-    em_cpu_name = future.stats.get('worker_func_cpu_name', 'Unknown')
-    em_cpu_brand = future.stats.get('worker_func_cpu_brand', 'Unknown')
-    em_cpu_arch = future.stats.get('worker_func_cpu_architecture', 'Unknown')
-    em_cpu_cores_physical = future.stats.get('worker_func_cpu_cores_physical', 0)
-    em_cpu_cores_logical = future.stats.get('worker_func_cpu_cores_logical', 0)
-    em_cpu_frequency = future.stats.get('worker_func_cpu_frequency', 0.0)
+    em_cpu_name = future.stats.get('worker_func_psutil_cpu_name', 'Unknown')
+    em_cpu_brand = future.stats.get('worker_func_psutil_cpu_brand', 'Unknown')
+    em_cpu_arch = future.stats.get('worker_func_psutil_cpu_architecture', 'Unknown')
+    em_cpu_cores_physical = future.stats.get('worker_func_psutil_cpu_cores_physical', 0)
+    em_cpu_cores_logical = future.stats.get('worker_func_psutil_cpu_cores_logical', 0)
+    em_cpu_frequency = future.stats.get('worker_func_psutil_cpu_frequency', 0.0)
     
     print(f"   📊 FROM ENERGY MANAGER WORKER:")
     print(f"      CPU Name: {em_cpu_name}")
@@ -221,7 +221,7 @@ def print_stats(future):
     
     print("=" * 80)
 
-    print(f"CPU User Time: {future.stats.get('worker_func_cpu_user_time', 'N/A')}")
+    print(f"CPU User Time: {future.stats.get('worker_func_psutil_cpu_user_time', 'N/A')}")
     print(f"CPU Usage Average: {future.stats.get('worker_func_avg_cpu_usage', 'N/A')}")  # busqueda de que libreria usa : psutils --> percentaje uso cpu 
     print(f"Energy Consumption: {future.stats.get('worker_func_energy_consumption', 'N/A')}")
     

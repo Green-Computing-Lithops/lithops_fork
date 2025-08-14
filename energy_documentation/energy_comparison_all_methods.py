@@ -149,7 +149,7 @@ def run_map_reduce(num_workers, text_chunks):
     if map_futures:
         perf_energy_cores = map_futures[0].stats.get('worker_func_perf_energy_cores', 0)
         avg_cpu_usage = map_futures[0].stats.get('worker_func_avg_cpu_usage', 0)
-        cpu_user_time = map_futures[0].stats.get('worker_func_cpu_user_time', 0)
+        cpu_user_time = map_futures[0].stats.get('worker_func_psutil_cpu_user_time', 0)
         print(f"Energy metrics from map: {perf_energy_cores:.4f}J")
     else:
         perf_energy_cores = 0
@@ -217,7 +217,7 @@ def run_call_async(num_workers, text_chunks):
     # Get energy metrics from the future
     perf_energy_cores = future.stats.get('worker_func_perf_energy_cores', 0)
     avg_cpu_usage = future.stats.get('worker_func_avg_cpu_usage', 0)
-    cpu_user_time = future.stats.get('worker_func_cpu_user_time', 0)
+    cpu_user_time = future.stats.get('worker_func_psutil_cpu_user_time', 0)
     
     # Calculate the product metric using execution time
     cpu_energy_product = avg_cpu_usage * execution_time
@@ -271,7 +271,7 @@ def run_map_then_reduce(num_workers, text_chunks):
     if map_futures:
         perf_energy_cores = map_futures[0].stats.get('worker_func_perf_energy_cores', 0)
         avg_cpu_usage = map_futures[0].stats.get('worker_func_avg_cpu_usage', 0)
-        cpu_user_time = map_futures[0].stats.get('worker_func_cpu_user_time', 0)
+        cpu_user_time = map_futures[0].stats.get('worker_func_psutil_cpu_user_time', 0)
     else:
         perf_energy_cores = 0
         avg_cpu_usage = 0
