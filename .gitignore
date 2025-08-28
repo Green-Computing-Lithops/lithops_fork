@@ -44,3 +44,6 @@ energy_data/
 
 # Doc built HTML files
 docs/_build
+
+
+venv310/
