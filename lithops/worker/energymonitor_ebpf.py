@@ -103,9 +103,27 @@ class EBPFEnergyMonitor:
             import bcc
             return True
         except ImportError:
-            print("BCC (BPF Compiler Collection) is not installed.")
-            print("Please install it with: sudo apt-get install bpfcc-tools python3-bpfcc")
-            return False
+            # Try to add system packages path for BCC
+            import sys
+            system_packages_paths = [
+                '/usr/lib/python3/dist-packages',
+                '/usr/local/lib/python3/dist-packages',
+                '/usr/lib/python3.10/dist-packages',
+                '/usr/local/lib/python3.10/dist-packages'
+            ]
+            
+            for path in system_packages_paths:
+                if path not in sys.path:
+                    sys.path.append(path)
+            
+            try:
+                import bcc
+                print(f"✅ Found BCC in system packages: {bcc.__file__}")
+                return True
+            except ImportError:
+                print("BCC (BPF Compiler Collection) is not installed.")
+                print("Please install it with: sudo apt-get install bpfcc-tools python3-bpfcc")
+                return False
             
     def _check_kernel_config(self):
         """Check if the kernel is configured for BPF."""
@@ -144,8 +162,28 @@ class EBPFEnergyMonitor:
             self.bpf = BPF(text=BPF_PROGRAM)
             
             print("Attaching to context switch events...")
-            # Attach to context switch events
-            self.bpf.attach_kprobe(event="finish_task_switch", fn_name="on_context_switch")
+            # Try different kernel probe points for context switches
+            probe_points = [
+                "schedule",
+                "__schedule", 
+                "pick_next_task_fair",
+                "context_switch"
+            ]
+            
+            attached = False
+            for probe_point in probe_points:
+                try:
+                    print(f"Trying to attach to {probe_point}...")
+                    self.bpf.attach_kprobe(event=probe_point, fn_name="on_context_switch")
+                    print(f"✅ Successfully attached to {probe_point}")
+                    attached = True
+                    break
+                except Exception as e:
+                    print(f"Failed to attach to {probe_point}: {e}")
+                    continue
+            
+            if not attached:
+                raise Exception("Failed to attach to any kernel probe point")
             
             print("Opening perf buffer...")
             # Open perf buffer for process events
